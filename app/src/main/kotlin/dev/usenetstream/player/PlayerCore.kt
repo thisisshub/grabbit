@@ -77,7 +77,17 @@ class PlayerCore(val player: ExoPlayer, val next: GuideEpisode?) {
 fun buildPlayer(context: Context, route: Route.Player): ExoPlayer =
     ExoPlayer.Builder(context)
         // Platform decoders first; FFmpeg (AC3/E-AC3/DTS/TrueHD) only where the device has none (e.g. the Hisense TV).
-        .setRenderersFactory(DefaultRenderersFactory(context).setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON))
+        .setRenderersFactory(
+            object : DefaultRenderersFactory(context) {
+                // Our own surround-to-stereo fold, so dialog boost can lift the centre channel (see DialogMix).
+                override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean) =
+                    androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
+                        .setEnableFloatOutput(enableFloatOutput)
+                        .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                        .setAudioProcessors(arrayOf(DialogMix()))
+                        .build()
+            }.setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON),
+        )
         // Default factory so side-loaded subtitle files can join the stream (see Subtitles.kt).
         .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(RoutingDataSource.factory(context, route.media.source)))
         .setLoadControl(loadControl(context))

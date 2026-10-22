@@ -7,7 +7,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * "Dialog boost": an EQ on the player's audio session that lifts speech (1–4 kHz), tames rumble below 150 Hz,
+ * "Dialog boost", two parts: for 5.1/7.1 the centre channel is lifted before the fold to stereo (DialogMix);
+ * on top, an EQ on the player's audio session that lifts speech (1–4 kHz), tames rumble below 150 Hz,
  * and a limiter that keeps explosions from jumping out once the voice is louder. Needs Android 9 (DynamicsProcessing).
  * Has no effect when audio goes out undecoded (HDMI passthrough to an AV receiver).
  */
@@ -56,7 +57,7 @@ object DialogBoost {
     @androidx.annotation.RequiresApi(Build.VERSION_CODES.P)
     private fun build(sessionId: Int): DynamicsProcessing {
         val cutoffs = floatArrayOf(150f, 500f, 1000f, 2500f, 4000f, 8000f, 20000f)
-        val gains = floatArrayOf(-4f, -1f, 2f, 6f, 5f, 1f, 0f)
+        val gains = floatArrayOf(-6f, -2f, 3f, 8f, 7f, 2f, 0f)
         val cfg = DynamicsProcessing.Config.Builder(
             DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION,
             2, true, cutoffs.size, false, 0, false, 0, true,
