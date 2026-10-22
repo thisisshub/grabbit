@@ -73,6 +73,9 @@ fun SettingsTab(vm: MainViewModel, openFile: () -> Unit) {
             FeedbackSection(vm)
         }
 
+        Section(dev.usenetstream.feedback.Support.TITLE)
+        SupportSection(vm)
+
         Section("About")
         Text("Grabbit ${dev.usenetstream.BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 20.dp))
         DisclaimerText(Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
@@ -128,6 +131,22 @@ fun SettingsTab(vm: MainViewModel, openFile: () -> Unit) {
         Section("Files")
         TextButton(openFile, Modifier.padding(horizontal = 12.dp)) { Text("Open an NZB file…", color = Fg) }
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun SupportSection(vm: MainViewModel) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(dev.usenetstream.feedback.Support.BLURB, color = Muted, style = MaterialTheme.typography.bodySmall)
+        GlassButton(
+            {
+                runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(dev.usenetstream.feedback.Support.URL))) }
+                    .onFailure { vm.notifyUser("No browser to open the page") }
+            },
+            Modifier.fillMaxWidth(),
+            height = 48.dp,
+        ) { Text("Buy me a chai") }
     }
 }
 

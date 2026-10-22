@@ -3,6 +3,10 @@ package dev.usenetstream.ui
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -82,43 +86,73 @@ fun leavesLabel(at: Long?, nowMs: Long = System.currentTimeMillis()): String? {
     return if (days <= 0) "Leaves today" else "Leaves in ${days}d"
 }
 
-/** The service's white logo (SVG), or its name when the logo can't load. */
-@Composable
-fun ServiceLogo(service: OttService, height: Dp, modifier: Modifier = Modifier) {
-    val name: @Composable () -> Unit = {
-        Text(service.name, color = service.onBrand(), style = MaterialTheme.typography.labelLarge, maxLines = 1)
+/**
+ * The brand colour, nudged until it reads as text on [over] (Apple's graphite would vanish on a dark page).
+ * Lightens on dark backgrounds, darkens on light ones; Netflix red and Prime blue pass unchanged.
+ */
+fun brandInk(s: OttService, over: Color): Color {
+    val toward = if (over.luminance() < 0.5f) Color.White else Color.Black
+    var c = Color(s.color)
+    var t = 0f
+    while (contrast(c, over) < 3.2 && t < 1f) {
+        t += 0.1f
+        c = androidx.compose.ui.graphics.lerp(Color(s.color), toward, t)
     }
-    if (service.logoWhite == null) return Box(modifier) { name() }
-    SubcomposeAsyncImage(
-        model = service.logoWhite,
-        contentDescription = service.name,
-        contentScale = ContentScale.Fit,
-        alignment = Alignment.CenterStart,
-        error = { name() },
-        modifier = modifier.height(height),
+    return c
+}
+
+/** The service's name, spelled out in its colour. */
+@Composable
+fun ServiceName(s: OttService, fontSize: androidx.compose.ui.unit.TextUnit, modifier: Modifier = Modifier, over: Color = Ink, color: Color? = null) {
+    Text(
+        s.name,
+        color = color ?: brandInk(s, over),
+        fontSize = fontSize,
+        letterSpacing = 0.2.sp,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = modifier,
     )
+}
+
+/**
+ * Empty pill for a service: a faint wash of its colour, a soft glow, a crisp brand border, the name centered.
+ * [over] is what's behind it (for text contrast); [scrim] darkens it when it sits on artwork.
+ */
+@Composable
+fun BrandPill(
+    s: OttService,
+    modifier: Modifier = Modifier,
+    fontSize: androidx.compose.ui.unit.TextUnit = 17.sp,
+    over: Color = Ink,
+    scrim: Boolean = false,
+    glow: Boolean = true,
+    label: String? = null,
+) {
+    val ink = brandInk(s, if (scrim) Color(0xFF000000) else over)
+    val shape = RoundedCornerShape(50)
+    Box(
+        modifier
+            .let { if (glow && !LocalLowEndUi.current) it.shadow(14.dp, shape, ambientColor = ink, spotColor = ink) else it }
+            .clip(shape)
+            .background(if (scrim) Color(0xB3000000) else over)
+            .background(Color(s.color).copy(alpha = 0.16f))
+            .border(1.5.dp, ink, shape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label ?: s.name, color = ink, fontSize = fontSize, letterSpacing = 0.2.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 14.dp))
+    }
 }
 
 @Composable
 fun ServicePill(service: OttService, onClick: () -> Unit) {
-    Box(
-        Modifier.height(44.dp).clip(RoundedCornerShape(22.dp)).background(service.brush())
-            .pressable(pressedScale = 0.95f, onClick = onClick).padding(horizontal = 18.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        ServiceLogo(service, 24.dp, Modifier.width(96.dp))
-    }
+    BrandPill(service, Modifier.height(44.dp).widthIn(min = 120.dp).pressable(pressedScale = 0.95f, onClick = onClick))
 }
 
-/** Small brand badge for a card corner. */
+/** Small brand badge for a card corner (sits on artwork, so it gets a dark scrim). */
 @Composable
-fun ServiceChip(service: OttService, modifier: Modifier = Modifier) {
-    Box(
-        modifier.clip(RoundedCornerShape(6.dp)).background(service.brush()).padding(horizontal = 7.dp, vertical = 4.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        ServiceLogo(service, 13.dp, Modifier.width(52.dp))
-    }
+fun ServiceChip(service: OttService, modifier: Modifier = Modifier, onArt: Boolean = true) {
+    BrandPill(service, modifier.height(24.dp), fontSize = 11.sp, scrim = onArt, glow = false)
 }
 
 /** 16:9 key art with the service badge; caption under it. */
@@ -241,8 +275,8 @@ fun LazyListScope.ottHomeRows(vm: MainViewModel, ott: OttState) {
 fun BrandRowTitle(text: String, s: OttService) {
     Row(Modifier.padding(start = 16.dp, top = 22.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(text, style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.width(8.dp))
-        ServiceChip(s)
+        Spacer(Modifier.width(10.dp))
+        ServiceChip(s, onArt = false)
     }
 }
 
@@ -271,7 +305,8 @@ fun ServiceScreen(vm: MainViewModel, id: String) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
                 }
                 Column(Modifier.align(Alignment.BottomStart).padding(20.dp)) {
-                    ServiceLogo(s, 40.dp, Modifier.width(180.dp))
+                    // On its own colour wash the name goes white, big.
+                    ServiceName(s, 40.sp, color = Color.White)
                     Spacer(Modifier.height(10.dp))
                     Text(
                         listOfNotNull(
@@ -357,7 +392,7 @@ fun OttTitleScreen(vm: MainViewModel, item: OttItem) {
         }
         item(key = "body") {
             Column(Modifier.padding(horizontal = 20.dp)) {
-                s?.let { ServiceChip(it) }
+                s?.let { ServiceChip(it, onArt = false) }
                 Text(t.title, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(top = 10.dp))
                 Row(Modifier.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     t.year?.let { Text("$it", color = Muted) }
@@ -401,18 +436,14 @@ fun OttTitleScreen(vm: MainViewModel, item: OttItem) {
 
                 if (s != null && link != null) {
                     Spacer(Modifier.height(10.dp))
-                    Row(
-                        Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(26.dp)).background(s.brush())
-                            .pressable {
-                                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link.videoLink ?: link.link)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                                    .onFailure { vm.notifyUser("Can't open ${s.name}") }
-                            },
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text("Open in ", color = s.onBrand(), style = MaterialTheme.typography.titleSmall)
-                        ServiceLogo(s, 16.dp, Modifier.width(70.dp))
-                    }
+                    BrandPill(
+                        s,
+                        Modifier.fillMaxWidth().height(52.dp).pressable {
+                            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link.videoLink ?: link.link)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                                .onFailure { vm.notifyUser("Can't open ${s.name}") }
+                        },
+                        label = "Open in ${s.name}",
+                    )
                 }
                 t.overview?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 18.dp)) }
             }

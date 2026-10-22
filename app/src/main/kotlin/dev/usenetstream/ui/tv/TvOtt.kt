@@ -63,10 +63,12 @@ import dev.usenetstream.OttState
 import dev.usenetstream.engine.ott.OttItem
 import dev.usenetstream.engine.ott.OttService
 import dev.usenetstream.ui.DarkPalette
-import dev.usenetstream.ui.ServiceLogo
-import dev.usenetstream.ui.brush
+import dev.usenetstream.ui.BrandPill
+import dev.usenetstream.ui.ServiceName
+import dev.usenetstream.ui.brandInk
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.compositeOver
 import dev.usenetstream.ui.leavesLabel
-import dev.usenetstream.ui.onBrand
 import dev.usenetstream.ui.sinceLabel
 import kotlinx.coroutines.delay
 
@@ -83,6 +85,25 @@ private fun TvArt(url: String?, title: String, modifier: Modifier) {
         contentScale = ContentScale.Crop,
         modifier = modifier,
     )
+}
+
+/** Focusable brand pill: tinted, brand border, name in brand colour; brighter wash when focused. */
+@Composable
+private fun TvBrandFocusable(s: OttService, onClick: () -> Unit, modifier: Modifier = Modifier, content: @Composable (Color) -> Unit) {
+    val ink = brandInk(s, P.bg)
+    val shape = RoundedCornerShape(50)
+    TvFocusable(
+        onClick = onClick,
+        modifier = modifier,
+        shape = shape,
+        container = Color(s.color).copy(alpha = 0.16f).compositeOver(P.bg),
+        focusedContainer = Color(s.color).copy(alpha = 0.34f).compositeOver(P.bg),
+        content = ink,
+        focusedContent = Color.White,
+        focusedScale = 1.08f,
+    ) {
+        Box(Modifier.fillMaxSize().border(1.5.dp, ink, shape), contentAlignment = Alignment.Center) { content(LocalContentColor.current) }
+    }
 }
 
 // ---------------------------------------------------------------- home rows
@@ -117,23 +138,14 @@ private fun TvBrandTitle(text: String, s: OttService) {
     Row(Modifier.padding(start = TvSafeH, top = 18.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(text, fontSize = 20.sp)
         Spacer(Modifier.width(10.dp))
-        Box(Modifier.clip(RoundedCornerShape(6.dp)).background(s.brush()).padding(horizontal = 8.dp, vertical = 4.dp)) { ServiceLogo(s, 14.dp, Modifier.width(60.dp)) }
+        BrandPill(s, Modifier.height(30.dp), fontSize = 14.sp, over = P.bg, glow = false)
     }
 }
 
 @Composable
 private fun TvServicePill(s: OttService, onClick: () -> Unit) {
-    TvFocusable(
-        onClick = onClick,
-        modifier = Modifier.height(56.dp).width(170.dp),
-        shape = RoundedCornerShape(28.dp),
-        container = Color(s.color),
-        focusedContainer = Color(s.color),
-        content = s.onBrand(),
-        focusedContent = s.onBrand(),
-        focusedScale = 1.1f,
-    ) {
-        Box(Modifier.fillMaxSize().background(s.brush()), contentAlignment = Alignment.Center) { ServiceLogo(s, 30.dp, Modifier.width(130.dp)) }
+    TvBrandFocusable(s, onClick, Modifier.height(56.dp).width(190.dp)) { ink ->
+        Text(s.name, color = ink, fontSize = 20.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 16.dp))
     }
 }
 
@@ -146,7 +158,7 @@ private fun TvWideCard(item: OttItem, s: OttService?, caption: String?, width: D
         TvFocusable(onClick = onClick, modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f), shape = RoundedCornerShape(10.dp), focusedScale = 1.08f, interaction = interaction) {
             val art = item.title.wide ?: item.title.backdrop
             if (art != null) TvArt(art, item.title.title, Modifier.fillMaxSize()) else dev.usenetstream.ui.NoArt(item.title.title, s, 26.sp)
-            s?.let { Box(Modifier.align(Alignment.TopStart).padding(8.dp).clip(RoundedCornerShape(6.dp)).background(it.brush()).padding(horizontal = 7.dp, vertical = 4.dp)) { ServiceLogo(it, 16.dp, Modifier.width(64.dp)) } }
+            s?.let { BrandPill(it, Modifier.align(Alignment.TopStart).padding(8.dp).height(26.dp), fontSize = 12.sp, scrim = true, glow = false) }
         }
         Column(Modifier.height(48.dp).padding(top = 10.dp)) {
             Text(item.title.title, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (focused) P.fg else P.muted)
@@ -199,7 +211,7 @@ fun TvService(vm: MainViewModel, id: String) {
         Column(Modifier.fillMaxSize()) {
         // Fixed band for the logo and the focused title; the rows scroll underneath it, never over it.
         Column(Modifier.fillMaxWidth().height(200.dp).padding(start = TvSafeH, top = TvSafeV + 8.dp)) {
-            ServiceLogo(s, 40.dp, Modifier.width(200.dp))
+            ServiceName(s, 40.sp, color = Color.White)
             shown?.let {
                 Text(it.title, fontSize = 28.sp, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 14.dp).width(640.dp))
                 it.overview?.let { o -> Text(o, fontSize = 15.sp, color = Color.White.copy(alpha = 0.85f), maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp).width(640.dp)) }
@@ -252,7 +264,7 @@ fun TvOttTitle(vm: MainViewModel, item: OttItem) {
         TvArt(t.backdrop ?: t.wide, t.title, Modifier.fillMaxSize())
         Box(Modifier.fillMaxSize().tvScrim())
         Column(Modifier.align(Alignment.CenterStart).padding(start = TvSafeH).width(640.dp)) {
-            s?.let { Box(Modifier.clip(RoundedCornerShape(6.dp)).background(it.brush()).padding(horizontal = 9.dp, vertical = 5.dp)) { ServiceLogo(it, 16.dp, Modifier.width(70.dp)) } }
+            s?.let { BrandPill(it, Modifier.height(30.dp), fontSize = 14.sp, scrim = true, glow = false) }
             Text(t.title, fontSize = 44.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, letterSpacing = (-0.8).sp, modifier = Modifier.padding(top = 12.dp))
             Text(
                 listOfNotNull(t.year?.toString(), t.rating?.let { "★ %.1f".format(it / 10.0) }, t.runtimeMin?.let { "${it / 60}h ${it % 60}m".removePrefix("0h ") }, if (t.isSeries) "Series" else "Movie", t.genres.take(3).joinToString(" • ").ifEmpty { null })
@@ -275,24 +287,14 @@ fun TvOttTitle(vm: MainViewModel, item: OttItem) {
                     is OttMatch.Failed -> TvButton("Try again", { vm.back(); vm.openOtt(item) }, Modifier.focusRequester(main))
                 }
                 if (s != null && link != null) {
-                    TvFocusable(
+                    TvBrandFocusable(
+                        s,
                         onClick = {
                             runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link.videoLink ?: link.link)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                                 .onFailure { vm.notifyUser("${s.name} isn't installed on this TV") }
                         },
                         modifier = Modifier.height(52.dp).let { if (match == OttMatch.NotFound || match == OttMatch.Checking) it.focusRequester(main) else it },
-                        shape = RoundedCornerShape(26.dp),
-                        container = Color(s.color),
-                        focusedContainer = Color(s.color),
-                        content = s.onBrand(),
-                        focusedContent = s.onBrand(),
-                        focusedScale = 1.08f,
-                    ) {
-                        Row(Modifier.align(Alignment.Center).background(s.brush()).fillMaxSize().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("Open in ", fontSize = 17.sp, color = LocalContentColor.current)
-                            ServiceLogo(s, 18.dp, Modifier.width(80.dp))
-                        }
-                    }
+                    ) { ink -> Text("Open in ${s.name}", color = ink, fontSize = 17.sp, maxLines = 1, modifier = Modifier.padding(horizontal = 24.dp)) }
                 }
             }
         }

@@ -88,8 +88,6 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
-        // Service logos are SVG.
-        coil.Coil.setImageLoader(coil.ImageLoader.Builder(this).components { add(coil.decode.SvgDecoder.Factory()) }.build())
         // The screen's best mode (a 1080p TV can't show 4K; don't pick 4K releases for it).
         @Suppress("DEPRECATION")
         dev.usenetstream.player.Decoders.screenHeight = windowManager.defaultDisplay.supportedModes

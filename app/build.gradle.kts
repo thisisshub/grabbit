@@ -21,8 +21,8 @@ android {
         applicationId = "dev.usenetstream"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.1.0-beta.1"
+        versionCode = 3
+        versionName = "0.1.0-beta.2"
         buildConfigField("String", "GUIDE_KEY", "\"${localProp("grabbit.guideKey")}\"")
         buildConfigField("String", "FEEDBACK_REPO", "\"${localProp("grabbit.feedbackRepo")}\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -68,7 +68,6 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-core")
     implementation("io.coil-kt:coil-compose:2.7.0")
-    implementation("io.coil-kt:coil-svg:2.7.0")
     implementation("dev.chrisbanes.haze:haze:1.1.1")
     implementation("androidx.tv:tv-material:1.0.0")
     // AC3 / E-AC3 / DTS / TrueHD audio in software for TVs and phones without those decoders (Jellyfin's build of the Media3 extension).

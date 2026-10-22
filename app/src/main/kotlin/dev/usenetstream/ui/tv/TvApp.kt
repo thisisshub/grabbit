@@ -585,6 +585,7 @@ private fun TvSettings(vm: MainViewModel, setupPanel: @Composable () -> Unit) {
             )
         }
         if (dev.usenetstream.feedback.Feedback.enabled) item { TvFeedback(vm) }
+        item { TvSupport() }
         item {
             Text("About · Grabbit ${dev.usenetstream.BuildConfig.VERSION_NAME}", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
             dev.usenetstream.ui.Disclaimer.POINTS.forEach { Text("•  $it", color = P.muted, fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp).width(900.dp)) }
@@ -593,6 +594,20 @@ private fun TvSettings(vm: MainViewModel, setupPanel: @Composable () -> Unit) {
             Text("Server & indexer (or set them up from your phone above)", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
             Box(Modifier.width(560.dp)) { SettingsScreen(vm.config, vm.indexer, vm::saveSettings) }
         }
+    }
+}
+
+/** Tip jar as a QR: open it on a phone (UPI apps live there anyway). */
+@Composable
+private fun TvSupport() {
+    val qr = remember { dev.usenetstream.link.qrBitmap(dev.usenetstream.feedback.Support.URL, 520).asImageBitmap() }
+    Text(dev.usenetstream.feedback.Support.TITLE, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+    Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.foundation.Image(qr, "Support QR code", Modifier.size(170.dp).background(Color.White, RoundedCornerShape(12.dp)).padding(8.dp))
+        Text(
+            dev.usenetstream.feedback.Support.BLURB + "\nScan with your phone to buy me a chai.",
+            color = P.muted, fontSize = 15.sp, modifier = Modifier.padding(start = 20.dp).width(460.dp),
+        )
     }
 }
 
