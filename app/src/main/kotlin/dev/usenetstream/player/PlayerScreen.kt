@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -121,6 +122,8 @@ fun PlayerScreen(vm: MainViewModel, route: Route.Player, inPip: Boolean) {
     val haptic = rememberHaptic()
     val core = rememberPlayerCore(vm, route)
     val player = core.player
+    val subSize by SubtitleStyle.size.collectAsState()
+    val subBg by SubtitleStyle.background.collectAsState()
     val next = core.next
 
     var controls by remember { mutableStateOf(true) }
@@ -171,7 +174,11 @@ fun PlayerScreen(vm: MainViewModel, route: Route.Player, inPip: Boolean) {
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(
             factory = { PlayerView(it).apply { this.player = player; useController = false; keepScreenOn = true } },
-            update = { it.resizeMode = if (fill) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT },
+            update = { v ->
+                v.resizeMode = if (fill) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
+                subSize.hashCode() + subBg.hashCode() // re-run when the style changes
+                SubtitleStyle.apply(v, tv = false)
+            },
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -300,7 +307,7 @@ fun PlayerScreen(vm: MainViewModel, route: Route.Player, inPip: Boolean) {
     }
 
     when (sheet) {
-        Sheet.TRACKS -> TracksSheet(core.tracks, player) { sheet = null }
+        Sheet.TRACKS -> TracksSheet(core.tracks, player, vm, session) { sheet = null }
         Sheet.SPEED -> SpeedSheet(core.speed, { core.setPlaybackSpeed(it) }) { sheet = null }
         Sheet.EPISODES -> EpisodesSheet(vm, session) { sheet = null }
         null -> Unit
@@ -472,9 +479,37 @@ private fun SeekFlash(flash: Pair<Int, Long>?) {
 
 @OptIn(UnstableApi::class)
 @Composable
-private fun TracksSheet(tracks: Tracks, player: ExoPlayer, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = Card) {
+private fun TracksSheet(tracks: Tracks, player: ExoPlayer, vm: MainViewModel, session: dev.usenetstream.PlaySession, onDismiss: () -> Unit) {
+    var online by remember { mutableStateOf(false) }
+    val subs by vm.onlineSubs.collectAsState()
+    ModalBottomSheet({ vm.resetSubtitleSearch(); onDismiss() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = Card) {
+        if (online) {
+            OnlineSubsList(subs, vm, onPick = { file, lang -> player.addSubtitle(file, lang); vm.resetSubtitleSearch(); onDismiss() }, onBack = { online = false; vm.resetSubtitleSearch() })
+            return@ModalBottomSheet
+        }
         LazyColumn(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
+            if (DialogBoost.supported) item {
+                val boost by DialogBoost.on.collectAsState()
+                Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("🗣️  Dialog boost", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text("Clearer voices, calmer explosions", color = Muted, style = MaterialTheme.typography.bodySmall)
+                    }
+                    androidx.compose.material3.Switch(boost, { if (!DialogBoost.set(it)) vm.notifyUser("Dialog boost isn't available on this phone") })
+                }
+            }
+            item {
+                val size by SubtitleStyle.size.collectAsState()
+                val bg by SubtitleStyle.background.collectAsState()
+                Column(Modifier.padding(horizontal = 24.dp, vertical = 6.dp)) {
+                    Text("Subtitle size", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SubtitleSize.entries.forEach { s -> dev.usenetstream.ui.GlassChip(size == s, { SubtitleStyle.setSize(s) }, { Text(s.label) }) }
+                        Spacer(Modifier.width(8.dp))
+                        SubtitleBackground.entries.forEach { b -> dev.usenetstream.ui.GlassChip(bg == b, { SubtitleStyle.setBackground(b) }, { Text(b.label) }) }
+                    }
+                }
+            }
             for ((type, title) in listOf(C.TRACK_TYPE_AUDIO to "Audio", C.TRACK_TYPE_TEXT to "Subtitles")) {
                 val groups = tracks.groups.filter { it.type == type }
                 item { Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp)) }
@@ -486,6 +521,7 @@ private fun TracksSheet(tracks: Tracks, player: ExoPlayer, onDismiss: () -> Unit
                             onDismiss()
                         }
                     }
+                    if (vm.subtitlesEnabled) item { TrackRow("🔎  Find subtitles online", false) { online = true; vm.searchSubtitles(session) } }
                 }
                 if (groups.isEmpty()) item { Text("None in this file", color = Muted, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) }
                 groups.forEach { g ->
@@ -506,6 +542,37 @@ private fun TracksSheet(tracks: Tracks, player: ExoPlayer, onDismiss: () -> Unit
                                 onDismiss()
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OnlineSubsList(state: OnlineSubs, vm: MainViewModel, onPick: (java.io.File, String) -> Unit, onBack: () -> Unit) {
+    androidx.activity.compose.BackHandler(onBack = onBack)
+    Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
+        Row(Modifier.padding(horizontal = 24.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Subtitles online", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text("Back", color = Red, modifier = Modifier.pressable(onClick = onBack).padding(6.dp))
+        }
+        when (state) {
+            OnlineSubs.Idle, OnlineSubs.Searching -> Text("Searching OpenSubtitles…", color = Muted, modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp))
+            is OnlineSubs.Failed -> Text(state.message, color = Muted, modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp))
+            is OnlineSubs.Loading -> Text("Downloading…", color = Muted, modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp))
+            is OnlineSubs.Found -> LazyColumn(Modifier.heightIn(max = 520.dp)) {
+                val ordered = state.hits.sortedByDescending { it.fileId == state.bestFor }
+                items(ordered.size) { i ->
+                    val h = ordered[i]
+                    Column(Modifier.fillMaxWidth().pressable { vm.fetchSubtitle(h, onPick) }.padding(horizontal = 24.dp, vertical = 12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(languageName(h.language), style = MaterialTheme.typography.titleSmall)
+                            if (h.fileId == state.bestFor) dev.usenetstream.ui.Badge("BEST MATCH", Red, dev.usenetstream.ui.LocalPalette.current.onAccent)
+                            if (h.hearingImpaired) dev.usenetstream.ui.Badge("CC")
+                            if (h.machineTranslated) dev.usenetstream.ui.Badge("MACHINE")
+                        }
+                        Text(h.release, color = Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }

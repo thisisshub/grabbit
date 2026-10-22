@@ -88,6 +88,8 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
+        dev.usenetstream.player.SubtitleStyle.init(this)
+        dev.usenetstream.player.DialogBoost.init(this)
         // The screen's best mode (a 1080p TV can't show 4K; don't pick 4K releases for it).
         @Suppress("DEPRECATION")
         dev.usenetstream.player.Decoders.screenHeight = windowManager.defaultDisplay.supportedModes

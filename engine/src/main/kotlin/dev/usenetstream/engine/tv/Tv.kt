@@ -64,6 +64,10 @@ class TvMazeClient(private val http: HttpGet = UrlConnectionGet()) {
     fun tvdbByImdb(imdbId: String): String? =
         fetch("https://api.tvmaze.com/lookup/shows?imdb=$imdbId")?.get("externals").obj()?.int("thetvdb")?.toString()
 
+    /** IMDb id ("tt...") of a show known by TheTVDB id (subtitle sites search by IMDb). */
+    fun imdbByTvdb(tvdbId: String): String? =
+        fetch("https://api.tvmaze.com/lookup/shows?thetvdb=$tvdbId")?.get("externals").obj()?.str("imdb")
+
     fun guideByName(name: String): ShowGuide? {
         val q = java.net.URLEncoder.encode(name, "UTF-8")
         val show = fetch("https://api.tvmaze.com/singlesearch/shows?q=$q") ?: return null

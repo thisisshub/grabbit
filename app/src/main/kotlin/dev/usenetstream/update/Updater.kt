@@ -74,7 +74,9 @@ class Updater(context: Context) {
                 if (userAsked) _state.value = UpdateState.Failed(null, "Couldn't reach GitHub")
                 return@launch
             }
-            prefs.edit().putLong("checked_at", System.currentTimeMillis()).apply()
+            // Only "nothing new" pauses checking. A pending update is offered again on every launch
+            // (Android restarts the app when the install permission is granted, mid-flow).
+            if (found == null) prefs.edit().putLong("checked_at", System.currentTimeMillis()).apply()
             if (found == null) {
                 _state.value = if (userAsked) UpdateState.UpToDate else UpdateState.Idle
                 return@launch

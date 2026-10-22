@@ -23,7 +23,6 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import dev.usenetstream.MainViewModel
 import dev.usenetstream.Route
 import dev.usenetstream.engine.tv.GuideEpisode
@@ -79,7 +78,8 @@ fun buildPlayer(context: Context, route: Route.Player): ExoPlayer =
     ExoPlayer.Builder(context)
         // Platform decoders first; FFmpeg (AC3/E-AC3/DTS/TrueHD) only where the device has none (e.g. the Hisense TV).
         .setRenderersFactory(DefaultRenderersFactory(context).setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON))
-        .setMediaSourceFactory(ProgressiveMediaSource.Factory { UsenetDataSource(route.media.source) })
+        // Default factory so side-loaded subtitle files can join the stream (see Subtitles.kt).
+        .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(RoutingDataSource.factory(context, route.media.source)))
         .setLoadControl(loadControl(context))
         .setSeekBackIncrementMs(10_000)
         .setSeekForwardIncrementMs(10_000)
@@ -105,6 +105,20 @@ private fun loadControl(context: Context): DefaultLoadControl {
         .build()
 }
 
+/**
+ * Garbage where a missing article was can also crash the extractor outright (a bogus element size makes Media3's MKV
+ * reader index out of bounds) instead of failing to parse; that is still damage, so skip past it the same way.
+ */
+private fun looksLikeDamage(e: PlaybackException): Boolean {
+    if (e.errorCode != PlaybackException.ERROR_CODE_IO_UNSPECIFIED) return false
+    var c: Throwable? = e.cause
+    while (c != null) {
+        if (c is IndexOutOfBoundsException || c is NegativeArraySizeException || c is IllegalArgumentException) return true
+        c = c.cause
+    }
+    return false
+}
+
 /** Creates the player for [route], keeps [PlayerCore] in sync, saves progress, and releases it on exit. */
 @Composable
 fun rememberPlayerCore(vm: MainViewModel, route: Route.Player): PlayerCore {
@@ -118,7 +132,7 @@ fun rememberPlayerCore(vm: MainViewModel, route: Route.Player): PlayerCore {
             override fun onPlayerError(e: PlaybackException) {
                 // A missing article plays as zeros, which the parser rejects. Jump past the hole instead of dying;
                 // failing again just past the last skip means the hole is bigger, so jump further each time.
-                val damaged = e.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED
+                val damaged = e.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED || looksLikeDamage(e)
                 val at = player.currentPosition
                 core.streak = if (at <= core.lastSkipTo + STREAK_WINDOW_MS) core.streak + 1 else 0
                 if (damaged && core.streak < MAX_STREAK) {
@@ -137,6 +151,10 @@ fun rememberPlayerCore(vm: MainViewModel, route: Route.Player): PlayerCore {
                 core.playing = isPlaying
             }
 
+            override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                DialogBoost.attach(audioSessionId)
+            }
+
             override fun onPlaybackStateChanged(s: Int) {
                 core.state = s
                 if (s == Player.STATE_ENDED && core.next != null && core.countdown != -2) core.countdown = AUTOPLAY_S
@@ -147,9 +165,12 @@ fun rememberPlayerCore(vm: MainViewModel, route: Route.Player): PlayerCore {
             }
         }
         player.addListener(listener)
+        // ExoPlayer picks its audio session up front, so "changed" may never fire: attach to the current one now.
+        DialogBoost.attach(player.audioSessionId)
         onDispose {
             player.removeListener(listener)
             vm.saveProgress(session, player.currentPosition, player.duration)
+            DialogBoost.release()
             player.release()
         }
     }

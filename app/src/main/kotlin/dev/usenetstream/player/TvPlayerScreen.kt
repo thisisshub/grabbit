@@ -190,8 +190,14 @@ fun TvPlayerScreen(vm: MainViewModel, route: Route.Player) {
                 }
             },
     ) {
+        val subSize by SubtitleStyle.size.collectAsState()
+        val subBg by SubtitleStyle.background.collectAsState()
         AndroidView(
             factory = { PlayerView(it).apply { this.player = player; useController = false } },
+            update = { v ->
+                subSize.hashCode() + subBg.hashCode() // re-run when the style changes
+                SubtitleStyle.apply(v, tv = true)
+            },
             modifier = Modifier.fillMaxSize().focusRequester(surface).focusable(),
         )
 
@@ -248,7 +254,7 @@ fun TvPlayerScreen(vm: MainViewModel, route: Route.Player) {
         if (core.countdown >= 0 && core.next != null) UpNextCard(core.next, core.countdown, onPlay = { core.countdown = -1; vm.playNext(session) }, onCancel = { core.countdown = -2 })
 
         when (panel) {
-            Panel.TRACKS -> TvTracksPanel(core) { panel = null; runCatching { surface.requestFocus() } }
+            Panel.TRACKS -> TvTracksPanel(core, vm, session) { panel = null; runCatching { surface.requestFocus() } }
             Panel.EPISODES -> TvEpisodesPanel(vm, session) { panel = null; runCatching { surface.requestFocus() } }
             null -> Unit
         }
@@ -274,16 +280,29 @@ private fun UpNextCard(next: GuideEpisode, seconds: Int, onPlay: () -> Unit, onC
 
 @OptIn(UnstableApi::class)
 @Composable
-private fun TvTracksPanel(core: PlayerCore, onClose: () -> Unit) {
+private fun TvTracksPanel(core: PlayerCore, vm: MainViewModel, session: dev.usenetstream.PlaySession, onClose: () -> Unit) {
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) { delay(80); runCatching { first.requestFocus() } }
     val player = core.player
+    var online by remember { mutableStateOf(false) }
+    val subs by vm.onlineSubs.collectAsState()
+    if (online) {
+        TvOnlineSubs(subs, vm, session, onPick = { file, lang -> player.addSubtitle(file, lang); onClose() }, onBack = { online = false; vm.resetSubtitleSearch() })
+        return
+    }
     SidePanel("Audio & Subtitles") {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             var firstUsed = false
             fun mod(): Modifier = if (!firstUsed) { firstUsed = true; Modifier.focusRequester(first) } else Modifier
             for ((type, title) in listOf(C.TRACK_TYPE_AUDIO to "Audio", C.TRACK_TYPE_TEXT to "Subtitles")) {
                 val groups = core.tracks.groups.filter { it.type == type }
+                // Dialog boost sits at the end of the Audio section, just before Subtitles.
+                if (type == C.TRACK_TYPE_TEXT && DialogBoost.supported) item {
+                    val boost by DialogBoost.on.collectAsState()
+                    PanelRow(if (boost) "🗣️  Dialog boost: on" else "🗣️  Dialog boost: off", boost) {
+                        if (!DialogBoost.set(!boost)) vm.notifyUser("Dialog boost isn't available on this TV")
+                    }
+                }
                 item { Text(title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Color.White, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp)) }
                 if (type == C.TRACK_TYPE_TEXT) {
                     val m = mod()
@@ -291,6 +310,9 @@ private fun TvTracksPanel(core: PlayerCore, onClose: () -> Unit) {
                         PanelRow("Off", groups.none { it.isSelected }, m) {
                             player.trackSelectionParameters = player.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build(); onClose()
                         }
+                    }
+                    if (vm.subtitlesEnabled) item {
+                        PanelRow("🔎  Find subtitles online", false) { online = true; vm.searchSubtitles(session) }
                     }
                 }
                 groups.forEach { g ->
@@ -307,6 +329,21 @@ private fun TvTracksPanel(core: PlayerCore, onClose: () -> Unit) {
                             }
                         }
                     }
+                }
+            }
+            item {
+                Text("Subtitle size", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Color.White, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
+            }
+            item {
+                val size by SubtitleStyle.size.collectAsState()
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SubtitleSize.entries.forEach { s -> dev.usenetstream.ui.tv.TvChip(s.label, size == s, { SubtitleStyle.setSize(s) }) }
+                }
+            }
+            item {
+                val bg by SubtitleStyle.background.collectAsState()
+                Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SubtitleBackground.entries.forEach { b -> dev.usenetstream.ui.tv.TvChip(b.label, bg == b, { SubtitleStyle.setBackground(b) }) }
                 }
             }
             item {
@@ -329,6 +366,42 @@ private fun TvEpisodesPanel(vm: MainViewModel, session: dev.usenetstream.PlaySes
                 val done = show?.progress?.get(e.code)?.finished == true
                 PanelRow("${e.number}. ${e.name}${if (done) "  ✓" else ""}", e.number == session.episode, if (e.number == session.episode) Modifier.focusRequester(current) else Modifier) {
                     onClose(); vm.playEpisode(e)
+                }
+            }
+        }
+    }
+}
+
+/** OpenSubtitles results for what's playing; picking one downloads it and switches to it. */
+@Composable
+private fun TvOnlineSubs(
+    state: OnlineSubs,
+    vm: MainViewModel,
+    session: dev.usenetstream.PlaySession,
+    onPick: (java.io.File, String) -> Unit,
+    onBack: () -> Unit,
+) {
+    val first = remember { FocusRequester() }
+    LaunchedEffect(state is OnlineSubs.Found) { delay(80); runCatching { first.requestFocus() } }
+    androidx.activity.compose.BackHandler(onBack = onBack)
+    SidePanel("Subtitles online") {
+        when (state) {
+            OnlineSubs.Idle, OnlineSubs.Searching -> Text("Searching OpenSubtitles…", color = P.muted, fontSize = 16.sp)
+            is OnlineSubs.Failed -> Column {
+                Text(state.message, color = P.muted, fontSize = 16.sp)
+                PanelRow("Back", false, Modifier.focusRequester(first).padding(top = 10.dp), onBack)
+            }
+            is OnlineSubs.Loading -> Text("Downloading…", color = P.muted, fontSize = 16.sp)
+            is OnlineSubs.Found -> LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                val ordered = state.hits.sortedByDescending { it.fileId == state.bestFor }
+                items(ordered.size) { i ->
+                    val h = ordered[i]
+                    val tags = listOfNotNull("best match".takeIf { h.fileId == state.bestFor }, "CC".takeIf { h.hearingImpaired }, "machine".takeIf { h.machineTranslated })
+                    PanelRow(
+                        "${languageName(h.language)}${if (tags.isEmpty()) "" else " · " + tags.joinToString(" · ")}\n${h.release.take(48)}",
+                        false,
+                        if (i == 0) Modifier.focusRequester(first) else Modifier,
+                    ) { vm.fetchSubtitle(h, onPick) }
                 }
             }
         }

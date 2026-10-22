@@ -369,6 +369,67 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _disclaimerOk.value = true
     }
 
+    // ---------------------------------------------------------------- online subtitles
+
+    private val _onlineSubs = MutableStateFlow<dev.usenetstream.player.OnlineSubs>(dev.usenetstream.player.OnlineSubs.Idle)
+    val onlineSubs: StateFlow<dev.usenetstream.player.OnlineSubs> = _onlineSubs
+
+    val subtitlesEnabled: Boolean get() = BuildConfig.OPENSUBTITLES_KEY.isNotEmpty()
+
+    private val openSubs by lazy {
+        dev.usenetstream.engine.subs.OpenSubtitlesClient(BuildConfig.OPENSUBTITLES_KEY, "Grabbit v${BuildConfig.VERSION_NAME}")
+    }
+
+    /** Looks up subtitles for what's playing: by IMDb id (episode numbers for shows), else by release name. */
+    fun searchSubtitles(session: PlaySession) {
+        if (!subtitlesEnabled) return
+        _onlineSubs.value = dev.usenetstream.player.OnlineSubs.Searching
+        viewModelScope.launch(Dispatchers.IO) {
+            _onlineSubs.value = try {
+                val langs = dev.usenetstream.player.subtitleLanguages()
+                val q = when {
+                    session.season != null && session.showKey?.startsWith("tvdb:") == true -> {
+                        val showImdb = tvmaze.imdbByTvdb(session.showKey.removePrefix("tvdb:"))
+                        if (showImdb != null) dev.usenetstream.engine.subs.SubtitleQuery(parentImdbId = showImdb, season = session.season, episode = session.episode, languages = langs)
+                        else dev.usenetstream.engine.subs.SubtitleQuery(text = "${session.title} ${session.subtitle.orEmpty().substringBefore(" ·")}", languages = langs)
+                    }
+                    session.id.startsWith("imdb:") -> dev.usenetstream.engine.subs.SubtitleQuery(imdbId = session.id.removePrefix("imdb:"), languages = langs)
+                    else -> dev.usenetstream.engine.subs.SubtitleQuery(text = session.release, languages = langs)
+                }
+                val hits = openSubs.search(q).take(30)
+                val best = hits.maxByOrNull { dev.usenetstream.engine.subs.OpenSubtitlesClient.matchScore(it.release, session.release) }
+                    ?.takeIf { dev.usenetstream.engine.subs.OpenSubtitlesClient.matchScore(it.release, session.release) >= 3 }
+                if (hits.isEmpty()) dev.usenetstream.player.OnlineSubs.Failed("No subtitles found for this one")
+                else dev.usenetstream.player.OnlineSubs.Found(hits, best?.fileId)
+            } catch (e: Exception) {
+                dev.usenetstream.player.OnlineSubs.Failed(e.message ?: "Couldn't reach OpenSubtitles")
+            }
+        }
+    }
+
+    /** Downloads [hit] to the cache and hands the file to [onReady] on the main thread. */
+    fun fetchSubtitle(hit: dev.usenetstream.engine.subs.SubtitleHit, onReady: (java.io.File, String) -> Unit) {
+        val previous = _onlineSubs.value
+        _onlineSubs.value = dev.usenetstream.player.OnlineSubs.Loading(hit.fileId)
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val dir = java.io.File(getApplication<Application>().cacheDir, "subs").apply { mkdirs() }
+                val file = java.io.File(dir, "${hit.fileId}.srt")
+                if (!file.exists()) file.writeText(openSubs.download(hit.fileId))
+                withContext(Dispatchers.Main) { onReady(file, hit.language) }
+                _onlineSubs.value = dev.usenetstream.player.OnlineSubs.Idle
+            } catch (e: Exception) {
+                // Keep the list on screen so another file can be tried.
+                _onlineSubs.value = previous
+                notify("Couldn't get that subtitle: ${e.message}")
+            }
+        }
+    }
+
+    fun resetSubtitleSearch() {
+        _onlineSubs.value = dev.usenetstream.player.OnlineSubs.Idle
+    }
+
     /** Anonymous feedback + automatic playback-error reports (see feedback/Relay.kt). */
     val relay = dev.usenetstream.feedback.Relay(
         app, caps, app.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK),
