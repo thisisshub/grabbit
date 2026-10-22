@@ -64,6 +64,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -584,7 +586,7 @@ private fun TvSettings(vm: MainViewModel, setupPanel: @Composable () -> Unit) {
                 color = P.muted, fontSize = 14.sp, modifier = Modifier.padding(top = 10.dp),
             )
         }
-        if (dev.usenetstream.feedback.Feedback.enabled) item { TvFeedback(vm) }
+        if (vm.relay.enabled) item { TvFeedback(vm) }
         item { TvSupport() }
         item {
             Text("About · Grabbit ${dev.usenetstream.BuildConfig.VERSION_NAME}", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
@@ -630,29 +632,45 @@ private fun TvDisclaimer(onAccept: () -> Unit, onExit: () -> Unit) {
     }
 }
 
-/** TVs rarely have a browser: each report is a QR code to open on a phone. */
+/** The feedback form, remote-friendly: mood and topic chips, then the TV keyboard (or its mic) for the message. */
 @Composable
 private fun TvFeedback(vm: MainViewModel) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    var shown by remember { mutableStateOf<dev.usenetstream.feedback.Feedback.Kind?>(null) }
-    Text("Beta feedback · Grabbit ${dev.usenetstream.BuildConfig.VERSION_NAME}", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+    val f = dev.usenetstream.ui.FeedbackCopy
+    var mood by remember { mutableStateOf<String?>(null) }
+    var topic by remember { mutableStateOf("bug") }
+    var message by remember { mutableStateOf("") }
+    var status by remember { mutableStateOf<String?>(null) }
+    var sending by remember { mutableStateOf(false) }
+    val auto by vm.autoReports.collectAsState()
+    val scope = rememberCoroutineScope()
+    Text("Feedback", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+    Text("Bugs, ideas, rants: all welcome. " + f.PRIVACY, color = P.muted, fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp).width(900.dp))
     Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        dev.usenetstream.feedback.Feedback.Kind.entries.forEach { k -> TvChip(k.label, shown == k, { shown = if (shown == k) null else k }) }
+        f.MOODS.forEach { (id, face) -> TvChip(face, mood == id, { mood = if (mood == id) null else id }) }
     }
-    shown?.let { kind ->
-        val url = remember(kind) {
-            dev.usenetstream.feedback.Feedback.issueUrl(context, kind, vm.caps, isTv = true, failure = vm.lastFailure.takeIf { kind == dev.usenetstream.feedback.Feedback.Kind.PLAYBACK })
-        } ?: return@let
-        val qr = remember(url) { dev.usenetstream.link.qrBitmap(url, 640).asImageBitmap() }
-        Row(Modifier.padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            androidx.compose.foundation.Image(qr, "QR code", Modifier.size(220.dp).background(Color.White, RoundedCornerShape(12.dp)).padding(10.dp))
-            Text(
-                "Scan with your phone to open the report on GitHub.\nTV model, Android version and app version are already filled in." +
-                    if (kind == dev.usenetstream.feedback.Feedback.Kind.PLAYBACK && vm.lastFailure != null) "\nIncludes the last error: ${vm.lastFailure!!.title}" else "",
-                color = P.muted, fontSize = 15.sp, modifier = Modifier.padding(start = 20.dp).width(420.dp),
-            )
-        }
+    Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        f.TOPICS.forEach { (id, label) -> TvChip(label, topic == id, { topic = id }) }
     }
+    androidx.compose.material3.OutlinedTextField(
+        message, { if (it.length <= f.MAX) message = it },
+        Modifier.padding(top = 10.dp).width(720.dp),
+        placeholder = { Text(f.prompt(topic), color = P.muted) },
+        minLines = 2,
+    )
+    Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        TvButton(if (sending) "Sending…" else "Send it 🐰", {
+            if (sending || message.trim().length < 3) { status = "Write a little first"; return@TvButton }
+            sending = true
+            scope.launch {
+                val err = vm.relay.sendFeedback(topic, mood, message)
+                sending = false
+                status = err ?: f.THANKS
+                if (err == null) { message = ""; mood = null }
+            }
+        }, primary = true)
+        TvChip(if (auto) "Auto error reports: on" else "Auto error reports: off", auto, { vm.setAutoReports(!auto) })
+    }
+    status?.let { Text(it, color = P.muted, fontSize = 15.sp, modifier = Modifier.padding(top = 8.dp)) }
 }
 
 @Composable

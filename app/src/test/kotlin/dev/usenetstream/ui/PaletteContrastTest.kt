@@ -71,3 +71,16 @@ class FeedbackScrubTest {
         kotlin.test.assertTrue(out.contains("HTTP 429"))
     }
 }
+
+class PlaybackCategoryTest {
+    @Test
+    fun `failure reasons map to title-free categories`() {
+        val c = dev.usenetstream.feedback.Relay.Companion::categoryOf
+        kotlin.test.assertEquals("compressed-rar", c("compressed RAR (not -m0); download needed"))
+        kotlin.test.assertEquals("compressed-7z", c("compressed 7z (LZMA); download needed"))
+        kotlin.test.assertEquals("missing-volumes", c("first RAR volume is missing; unreadable: Some.Movie.2010.part03.rar"))
+        kotlin.test.assertEquals("missing-articles", c("x.mkv: article not found: <abc@def>"))
+        kotlin.test.assertEquals("archive-password", c("wrong archive password"))
+        kotlin.test.assertEquals("other", c("something new"))
+    }
+}

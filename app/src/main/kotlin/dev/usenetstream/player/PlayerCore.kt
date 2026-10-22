@@ -130,6 +130,7 @@ fun rememberPlayerCore(vm: MainViewModel, route: Route.Player): PlayerCore {
                     return
                 }
                 core.error = "${e.errorCodeName}: ${e.cause?.message ?: e.message}"
+                vm.reportPlayerError(e.errorCodeName)
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {

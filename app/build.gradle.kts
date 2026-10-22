@@ -6,8 +6,9 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-// Beta settings live in local.properties (git-ignored): grabbit.guideKey (bundled streaming-guide key)
-// and grabbit.feedbackRepo (owner/repo that "Report a bug" opens issues on).
+// Beta settings live in local.properties (git-ignored): grabbit.guideKey (bundled streaming-guide key) and
+// grabbit.feedbackUrl (the feedback relay). `-Pfriends` also bakes in grabbit.friends.* (Usenet + indexer logins)
+// for a private build shared with a few friends; never publish that APK.
 val local = Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
@@ -21,10 +22,16 @@ android {
         applicationId = "dev.usenetstream"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.1.0-beta.2"
+        versionCode = 4
+        versionName = "0.1.0-beta.3"
         buildConfigField("String", "GUIDE_KEY", "\"${localProp("grabbit.guideKey")}\"")
-        buildConfigField("String", "FEEDBACK_REPO", "\"${localProp("grabbit.feedbackRepo")}\"")
+        buildConfigField("String", "FEEDBACK_URL", "\"${localProp("grabbit.feedbackUrl")}\"")
+        val friends = project.hasProperty("friends")
+        fun friendsProp(name: String) = if (friends) localProp("grabbit.friends.$name") else ""
+        for ((field, key) in listOf("NNTP_HOST" to "nntpHost", "NNTP_USER" to "nntpUser", "NNTP_PASS" to "nntpPass", "INDEXER_URL" to "indexerUrl", "INDEXER_KEY" to "indexerKey")) {
+            buildConfigField("String", "FRIENDS_$field", "\"${friendsProp(key)}\"")
+        }
+        if (friends) versionNameSuffix = "-friends"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Phone (arm64) and the Hisense TV (32-bit ARM); keeps the FFmpeg decoder's native code small.
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }

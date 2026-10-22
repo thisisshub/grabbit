@@ -68,8 +68,8 @@ fun SettingsTab(vm: MainViewModel, openFile: () -> Unit) {
         Section("Streaming guide")
         GuideSection(vm)
 
-        if (dev.usenetstream.feedback.Feedback.enabled) {
-            Section("Beta feedback")
+        if (vm.relay.enabled) {
+            Section("Feedback")
             FeedbackSection(vm)
         }
 
@@ -150,30 +150,21 @@ private fun SupportSection(vm: MainViewModel) {
     }
 }
 
-/** Opens a pre-filled GitHub issue; its form applies the labels. */
+/** The in-app form (sent anonymously as a GitHub issue) and the auto-report switch. */
 @Composable
 private fun FeedbackSection(vm: MainViewModel) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    var open by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    val auto by vm.autoReports.collectAsState()
     Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            "Grabbit ${dev.usenetstream.BuildConfig.VERSION_NAME}. Reports open on GitHub with your device details filled in (never your server or passwords).",
-            color = Muted,
-            style = MaterialTheme.typography.bodySmall,
-        )
-        dev.usenetstream.feedback.Feedback.Kind.entries.forEach { kind ->
-            GlassButton(
-                {
-                    val failure = vm.lastFailure.takeIf { kind == dev.usenetstream.feedback.Feedback.Kind.PLAYBACK }
-                    val url = dev.usenetstream.feedback.Feedback.issueUrl(context, kind, vm.caps, isTv = false, failure = failure) ?: return@GlassButton
-                    runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
-                        .onFailure { vm.notifyUser("No browser to open GitHub") }
-                },
-                Modifier.fillMaxWidth(),
-                primary = false,
-                height = 48.dp,
-            ) { Text(kind.label + if (kind == dev.usenetstream.feedback.Feedback.Kind.PLAYBACK && vm.lastFailure != null) " (last error filled in)" else "") }
-        }
+        Text("Bugs, ideas, rants: all welcome, no account needed.", color = Muted, style = MaterialTheme.typography.bodySmall)
+        GlassButton({ open = true }, Modifier.fillMaxWidth(), height = 48.dp) { Text("Send feedback 🐰") }
     }
+    ToggleRow("Report playback errors automatically", auto, vm::setAutoReports)
+    Text(
+        "Only the kind of error and your device model. Never what you were watching.",
+        color = Muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 20.dp),
+    )
+    if (open) FeedbackSheet(vm.relay::sendFeedback) { open = false }
 }
 
 /** Movie of the Night key + country for the "what's on" lanes. */

@@ -164,10 +164,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val tvmaze = TvMazeClient()
     val caps = Decoders.caps
 
-    var config: NntpConfig? = store.load()
+    var config: NntpConfig? = store.load() ?: friendsConfig()?.also { (n, i) -> store.save(n); store.saveIndexer(i) }?.first
         private set
     var indexer: IndexerConfig? = store.loadIndexer()
         private set
+
+    /** Private friends builds come with the owner's logins; each install uses a small share of the connections. */
+    private fun friendsConfig(): Pair<NntpConfig, IndexerConfig?>? {
+        val user = BuildConfig.FRIENDS_NNTP_USER.ifEmpty { return null }
+        val nntp = NntpConfig(host = BuildConfig.FRIENDS_NNTP_HOST, username = user, password = BuildConfig.FRIENDS_NNTP_PASS, connections = FRIENDS_CONNECTIONS)
+        val idx = BuildConfig.FRIENDS_INDEXER_KEY.ifEmpty { null }?.let { IndexerConfig(BuildConfig.FRIENDS_INDEXER_URL, it) }
+        return nntp to idx
+    }
 
     private val _tab = MutableStateFlow(if (config == null) Tab.SETTINGS else Tab.HOME)
     val tab: StateFlow<Tab> = _tab
@@ -361,9 +369,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _disclaimerOk.value = true
     }
 
-    /** Pre-fills the playback report in Settings → Beta feedback. */
-    var lastFailure: dev.usenetstream.feedback.Feedback.Failure? = null
-        private set
+    /** Anonymous feedback + automatic playback-error reports (see feedback/Relay.kt). */
+    val relay = dev.usenetstream.feedback.Relay(
+        app, caps, app.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK),
+    ).also { it.flush() }
+
+    private val _autoReports = MutableStateFlow(relay.autoReports)
+    val autoReports: StateFlow<Boolean> = _autoReports
+
+    fun setAutoReports(v: Boolean) {
+        relay.autoReports = v
+        _autoReports.value = v
+    }
+
+    /** Called by the player when a stream dies mid-playback (after its own damage-skipping gave up). */
+    fun reportPlayerError(codeName: String) = relay.reportPlayback("player", codeName)
 
     private var openJob: Job? = null
     private var searchJob: Job? = null
@@ -901,9 +921,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 streamer?.close()
                 _stack.update { st -> if (st.lastOrNull() is Route.Opening) st.dropLast(1) else st }
                 val reason = e.message ?: e.javaClass.simpleName
-                lastFailure = dev.usenetstream.feedback.Feedback.Failure(title, attempts.firstOrNull()?.release?.title, reason)
-                val hint = if (dev.usenetstream.feedback.Feedback.enabled) " (report it from Settings)" else ""
-                notify("Can't play: ${reason.lineSequence().firstOrNull()}$hint")
+                relay.reportPlayback(dev.usenetstream.feedback.Relay.categoryOf(reason), e.javaClass.simpleName)
+                notify("Can't play: ${reason.lineSequence().firstOrNull()}")
             }
         }
     }
@@ -959,6 +978,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         const val MAX_ATTEMPTS = 3
         const val ROW_SIZE = 20
         const val FEED_TTL_MS = 30 * 60 * 1000L
+        const val FRIENDS_CONNECTIONS = 4
         /** Guide responses are kept on disk this long: the free key allows a limited number of calls a day. */
         const val GUIDE_TTL_MS = 6 * 60 * 60 * 1000L
         /** Services the guide keeps a daily top list for. */
