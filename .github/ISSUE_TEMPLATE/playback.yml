@@ -1,0 +1,56 @@
+name: Playback problem
+description: Something wouldn't play, stuttered, had no sound or looked wrong.
+title: "Can't play: "
+labels: ["bug", "playback", "beta"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for testing Grabbit! The app filled in what it knows; add what you saw.
+  - type: input
+    id: title-name
+    attributes:
+      label: Title
+      description: Movie or show (and episode) you tried.
+    validations:
+      required: true
+  - type: input
+    id: release
+    attributes:
+      label: Release
+      description: Release name if the app showed one.
+  - type: textarea
+    id: error
+    attributes:
+      label: Error shown
+      render: text
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: "e.g. stuck on Checking files, green picture, no sound, stops after 10 minutes"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Filled in by the app.
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      description: "Phone or Android TV (filled in by the app)."
+  - type: input
+    id: model
+    attributes:
+      label: Model
+  - type: input
+    id: android
+    attributes:
+      label: Android version
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Screen and decoder support, filled in by the app. Never contains your server, passwords or keys.
+      render: text

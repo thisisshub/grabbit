@@ -1,0 +1,51 @@
+name: Suggest an idea
+description: Something you'd love Grabbit to do.
+title: "Idea: "
+labels: ["enhancement", "beta"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Playback
+        - Search & browse
+        - Streaming guide (Netflix/Prime lanes)
+        - Shows & episodes
+        - Phone and TV link
+        - Look & feel
+        - Setup & settings
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: Your idea
+      description: What would you like, and when would you use it?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Filled in by the app.
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      description: "Phone or Android TV (filled in by the app)."
+  - type: input
+    id: model
+    attributes:
+      label: Model
+  - type: input
+    id: android
+    attributes:
+      label: Android version
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Screen and decoder support, filled in by the app. Never contains your server, passwords or keys.
+      render: text

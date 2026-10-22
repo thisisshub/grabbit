@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Grabbit: a rabbit head with a play button for a face. Drawn inside the 66dp adaptive-icon safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <group android:rotation="-14" android:pivotX="46" android:pivotY="50">
+        <path android:fillColor="#FFFFFFFF" android:pathData="M40.5,38 a5.5,13 0 1,0 11,0 a5.5,13 0 1,0 -11,0 Z" />
+        <path android:fillColor="#FFC9C9FF" android:pathData="M43.5,39 a2.5,9 0 1,0 5,0 a2.5,9 0 1,0 -5,0 Z" />
+    </group>
+    <group android:rotation="14" android:pivotX="62" android:pivotY="50">
+        <path android:fillColor="#FFFFFFFF" android:pathData="M56.5,38 a5.5,13 0 1,0 11,0 a5.5,13 0 1,0 -11,0 Z" />
+        <path android:fillColor="#FFC9C9FF" android:pathData="M59.5,39 a2.5,9 0 1,0 5,0 a2.5,9 0 1,0 -5,0 Z" />
+    </group>
+    <path android:fillColor="#FFFFFFFF" android:pathData="M36,65 a18,17 0 1,0 36,0 a18,17 0 1,0 -36,0 Z" />
+    <path android:fillColor="#FF2F2FE4" android:pathData="M50,57 L50,73 Q50,75 51.8,74 L63.5,66.5 Q65,65.5 63.5,64.5 L51.8,56 Q50,55 50,57 Z" />
+</vector>

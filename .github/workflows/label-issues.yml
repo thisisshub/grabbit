@@ -1,0 +1,37 @@
+# Adds device and area labels from the issue form answers (the form itself adds bug/playback/enhancement + beta).
+name: Label beta feedback
+on:
+  issues:
+    types: [opened, edited]
+permissions:
+  issues: write
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.issue.body || "";
+            const answer = (heading) => {
+              const m = body.match(new RegExp("### " + heading + "\\s*\\n+([^\\n]+)"));
+              return m && m[1].trim() !== "_No response_" ? m[1].trim() : null;
+            };
+            const labels = [];
+            const device = (answer("Device") || "").toLowerCase();
+            if (device.includes("tv")) labels.push("tv");
+            else if (device.includes("phone")) labels.push("phone");
+            const areas = {
+              "Playback": "area: playback",
+              "Search & browse": "area: search",
+              "Streaming guide (Netflix/Prime lanes)": "area: streaming guide",
+              "Shows & episodes": "area: shows",
+              "Phone and TV link": "area: phone-tv link",
+              "Look & feel": "area: ui",
+              "Setup & settings": "area: setup",
+            };
+            const area = areas[answer("Area")];
+            if (area) labels.push(area);
+            if (labels.length) {
+              await github.rest.issues.addLabels({ ...context.repo, issue_number: context.issue.number, labels });
+            }

@@ -1,0 +1,58 @@
+name: Something else is broken
+description: A crash, a button that does nothing, a screen that looks off.
+title: "Bug: "
+labels: ["bug", "beta"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for testing Grabbit! The app filled in what it knows; tell us what went wrong.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Playback
+        - Search & browse
+        - Streaming guide (Netflix/Prime lanes)
+        - Shows & episodes
+        - Phone and TV link
+        - Look & feel
+        - Setup & settings
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen again
+      placeholder: "1. Open ...\n2. Tap ...\n3. See ..."
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Filled in by the app.
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      description: "Phone or Android TV (filled in by the app)."
+  - type: input
+    id: model
+    attributes:
+      label: Model
+  - type: input
+    id: android
+    attributes:
+      label: Android version
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Screen and decoder support, filled in by the app. Never contains your server, passwords or keys.
+      render: text
