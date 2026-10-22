@@ -17,6 +17,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -258,6 +259,7 @@ private fun TvHome(vm: MainViewModel) {
             TvRowTitle("My List")
             TvPosterRow(myList.map { TvTile(it.key, it.title, it.coverUrl, null, it.year?.toString()) { vm.openKey(it.key, it.title, it.coverUrl) } })
         }
+        item(key = "update") { TvUpdateCard() }
         tvOttRows(vm, ott)
         fun row(title: String, groups: List<TitleGroup>) {
             if (groups.isEmpty()) return
@@ -587,6 +589,7 @@ private fun TvSettings(vm: MainViewModel, setupPanel: @Composable () -> Unit) {
             )
         }
         if (vm.relay.enabled) item { TvFeedback(vm) }
+        item { TvUpdateSettings() }
         item { TvSupport() }
         item {
             Text("About · Grabbit ${dev.usenetstream.BuildConfig.VERSION_NAME}", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
@@ -596,6 +599,58 @@ private fun TvSettings(vm: MainViewModel, setupPanel: @Composable () -> Unit) {
             Text("Server & indexer (or set them up from your phone above)", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
             Box(Modifier.width(560.dp)) { SettingsScreen(vm.config, vm.indexer, vm::saveSettings) }
         }
+    }
+}
+
+/** "Update ready" on the TV home: one focusable button drives the whole flow. */
+@Composable
+private fun TvUpdateCard() {
+    val updater = dev.usenetstream.update.Updater.get(androidx.compose.ui.platform.LocalContext.current)
+    val state by updater.state.collectAsState()
+    val r = when (val s = state) {
+        is dev.usenetstream.update.UpdateState.Available -> s.release
+        is dev.usenetstream.update.UpdateState.Downloading -> s.release
+        is dev.usenetstream.update.UpdateState.NeedsPermission -> s.release
+        is dev.usenetstream.update.UpdateState.Installing -> s.release
+        is dev.usenetstream.update.UpdateState.Failed -> s.release
+        else -> null
+    } ?: return
+    Row(
+        Modifier.padding(horizontal = TvSafeH, vertical = 10.dp).background(P.accent.copy(alpha = 0.14f), RoundedCornerShape(18.dp))
+            .border(1.dp, P.accent.copy(alpha = 0.6f), RoundedCornerShape(18.dp)).padding(18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.width(620.dp)) {
+            Text("🐰  Grabbit ${dev.usenetstream.ui.versionOf(r.tag)} is here", fontSize = 20.sp)
+            Text(dev.usenetstream.ui.whatsNew(r.notes, 2), color = P.muted, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        Spacer(Modifier.width(24.dp))
+        when (val s = state) {
+            is dev.usenetstream.update.UpdateState.Downloading -> Text("Downloading ${(s.fraction * 100).toInt()}%", color = P.fg, fontSize = 17.sp)
+            is dev.usenetstream.update.UpdateState.Installing -> Text("Installing…", color = P.fg, fontSize = 17.sp)
+            is dev.usenetstream.update.UpdateState.NeedsPermission -> TvButton("Allow installs", updater::openInstallPermission, primary = true)
+            is dev.usenetstream.update.UpdateState.Failed -> TvButton("Try again", { updater.install(r) }, primary = true)
+            else -> TvButton("Update now", { updater.install(r) }, primary = true)
+        }
+    }
+}
+
+@Composable
+private fun TvUpdateSettings() {
+    val updater = dev.usenetstream.update.Updater.get(androidx.compose.ui.platform.LocalContext.current)
+    val state by updater.state.collectAsState()
+    var auto by remember { mutableStateOf(updater.auto) }
+    Text("Updates · you're on ${dev.usenetstream.BuildConfig.VERSION_NAME}", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+    Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        TvButton(
+            when (state) {
+                dev.usenetstream.update.UpdateState.Checking -> "Checking…"
+                dev.usenetstream.update.UpdateState.UpToDate -> "Up to date ✓"
+                else -> "Check for updates"
+            },
+            { updater.check() },
+        )
+        TvChip(if (auto) "Auto-download: on" else "Auto-download: off", auto, { auto = !auto; updater.auto = auto })
     }
 }
 

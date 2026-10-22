@@ -86,4 +86,20 @@ class OttTest {
         assertFailsWith<IOException> { cached.get("other", emptyMap()) }
         assertNull(dir.listFiles()!!.firstOrNull { it.length() == 0L })
     }
+
+    @Test
+    fun `title pages get cast, makers, original title, languages and dates`() {
+        val t = MotnClient.parseTop(fixture("top_netflix.json"), "netflix", "in").first().title
+        assertEquals("என்ன விலை", t.originalTitle)
+        assertEquals("Nimisha Sajayan", t.cast.first())
+        assertEquals(listOf("Sajeev Pazhoor"), t.makers)
+        val nf = t.linkOn("netflix")!!
+        assertEquals(listOf("hin", "mal", "tam", "tel"), nf.audios)
+        assertTrue("eng" in nf.subtitles)
+        assertNotNull(nf.availableSince)
+        assertEquals("Tamil", dev.usenetstream.engine.ott.Languages.name("tam"))
+        val series = MotnClient.parseChanges(fixture("changes_new.json"), "in").first.first { it.title.isSeries }.title
+        assertEquals(1, series.seasonCount)
+        assertEquals(8, series.episodeCount)
+    }
 }

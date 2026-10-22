@@ -1,8 +1,14 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package dev.usenetstream.ui
 
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.layout.offset
+import dev.usenetstream.engine.newznab.playabilityOn
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.draw.shadow
@@ -370,6 +376,78 @@ fun ServiceScreen(vm: MainViewModel, id: String) {
 
 // ---------------------------------------------------------------- title page
 
+/** "#3 on Netflix today", "New on Prime · 2 days ago", "Leaves Netflix in 5 days": why this title is in front of you. */
+fun whyHere(item: OttItem, service: OttService?, leavingAt: Long?, nowMs: Long = System.currentTimeMillis()): String? {
+    val name = service?.name ?: return null
+    leavingAt?.let { at ->
+        val d = (at - nowMs / 1000) / 86_400
+        return if (d <= 0) "Leaves $name today" else "Leaves $name in $d day${if (d == 1L) "" else "s"}"
+    }
+    item.rank?.let { return "#$it on $name today" }
+    item.since?.let { at ->
+        val d = (nowMs / 1000 - at) / 86_400
+        return "New on $name · " + when { d <= 0 -> "today"; d == 1L -> "yesterday"; else -> "$d days ago" }
+    }
+    return "Streaming on $name"
+}
+
+/** Circular score ring: 0..100 rating drawn as an arc, "7.4" in the middle. */
+@Composable
+fun RatingRing(rating: Int, size: Dp = 56.dp) {
+    val p = LocalPalette.current
+    val sweep by androidx.compose.animation.core.animateFloatAsState(rating / 100f * 360f, androidx.compose.animation.core.tween(900), label = "ring")
+    val tint = when {
+        rating >= 75 -> Color(0xFF46D369)
+        rating >= 60 -> Color(0xFFF5C518)
+        else -> Color(0xFFFF8A65)
+    }
+    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+            val stroke = Stroke(width = size.toPx() / 11, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+            drawArc(p.divider, 0f, 360f, false, style = stroke)
+            drawArc(tint, -90f, sweep, false, style = stroke)
+        }
+        Text("%.1f".format(rating / 10.0), style = MaterialTheme.typography.titleSmall)
+    }
+}
+
+/** Colourful initials bubble for a person (the guide has names, no photos). */
+@Composable
+fun PersonBubble(name: String, role: String?) {
+    val hues = listOf(0xFF2F2FE4, 0xFFE50914, 0xFF00A8E1, 0xFF8230C6, 0xFFFF5E00, 0xFF0E8A16, 0xFFD6336C, 0xFF1F7A8C)
+    val c = Color(hues[(name.hashCode() and 0x7fffffff) % hues.size])
+    val initials = name.split(' ').filter { it.isNotBlank() }.let { w -> (w.firstOrNull()?.take(1).orEmpty() + (if (w.size > 1) w.last().take(1) else "")).uppercase() }
+    Column(Modifier.width(76.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            Modifier.size(60.dp).clip(CircleShape).background(Brush.linearGradient(listOf(c, c.copy(alpha = 0.55f)))),
+            contentAlignment = Alignment.Center,
+        ) { Text(initials, color = Color.White, style = MaterialTheme.typography.titleMedium) }
+        Text(name, style = MaterialTheme.typography.labelMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(top = 6.dp))
+        role?.let { Text(it, color = Muted, style = MaterialTheme.typography.labelSmall, maxLines = 1) }
+    }
+}
+
+/** Directors/creators first (with their role), then cast; someone who is both appears once. */
+fun castAndCrew(t: dev.usenetstream.engine.ott.OttTitle): List<Pair<String, String?>> {
+    val role = if (t.isSeries) "Creator" else "Director"
+    val makers = t.makers.take(3)
+    return makers.map { it to role } + t.cast.filter { it !in makers }.take(12).map { it to null }
+}
+
+/** Titles from the lanes that share a genre with [t], best-known first. */
+fun moreLike(ott: OttState, t: dev.usenetstream.engine.ott.OttTitle, max: Int = 12): List<OttItem> {
+    val genres = t.genres.toSet()
+    if (genres.isEmpty()) return emptyList()
+    val pool = ott.top.values.flatten() + ott.newItems + ott.leaving.values.flatten()
+    return pool.filter { it.title.id != t.id }
+        .distinctBy { it.title.id }
+        .map { it to it.title.genres.count { g -> g in genres } }
+        .filter { it.second > 0 }
+        .sortedWith(compareByDescending<Pair<OttItem, Int>> { it.second }.thenByDescending { it.first.title.rating ?: 0 })
+        .take(max)
+        .map { it.first }
+}
+
 @Composable
 fun OttTitleScreen(vm: MainViewModel, item: OttItem) {
     val ott by vm.ott.collectAsState()
@@ -379,63 +457,82 @@ fun OttTitleScreen(vm: MainViewModel, item: OttItem) {
     val match = matches[t.id] ?: OttMatch.Checking
     val context = LocalContext.current
     val link = t.linkOn(item.serviceId)
+    val leavingAt = ott.leaving[item.serviceId]?.firstOrNull { it.title.id == t.id }?.since
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    var storyOpen by rememberSaveable { mutableStateOf(false) }
+    val similar = remember(ott, t.id) { moreLike(ott, t) }
 
-    LazyColumn(Modifier.fillMaxSize().background(Ink), contentPadding = PaddingValues(bottom = navInset() + 24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().background(Ink), state = listState, contentPadding = PaddingValues(bottom = navInset() + 32.dp)) {
         item(key = "hero") {
-            Box(Modifier.fillMaxWidth().aspectRatio(16f / 10f)) {
-                Art(t.backdrop ?: t.wide, t.title, Modifier.fillMaxSize())
-                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color(0x80000000), 0.35f to Color.Transparent, 1f to Ink)))
+            Box(Modifier.fillMaxWidth().height(330.dp)) {
+                // Backdrop drifts at half speed as the page scrolls.
+                val drift by remember { androidx.compose.runtime.derivedStateOf { if (listState.firstVisibleItemIndex == 0) listState.firstVisibleItemScrollOffset * 0.5f else 0f } }
+                Art(t.backdrop ?: t.wide, t.title, Modifier.fillMaxSize().graphicsLayer { translationY = drift })
+                s?.let { Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color(it.color).copy(alpha = 0.25f), 0.5f to Color.Transparent))) }
+                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color(0x66000000), 0.35f to Color.Transparent, 0.75f to Ink.copy(alpha = 0.6f), 1f to Ink)))
                 IconButton(vm::back, Modifier.statusBarsPadding().padding(4.dp).clip(CircleShape).background(Color(0x66000000))) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
                 }
             }
         }
-        item(key = "body") {
-            Column(Modifier.padding(horizontal = 20.dp)) {
-                s?.let { ServiceChip(it, onArt = false) }
-                Text(t.title, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(top = 10.dp))
-                Row(Modifier.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    t.year?.let { Text("$it", color = Muted) }
-                    t.rating?.let {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Star, null, tint = Color(0xFFF5C518), modifier = Modifier.size(16.dp))
-                            Text(" %.1f".format(it / 10.0), color = Muted)
-                        }
-                    }
-                    t.runtimeMin?.let { Text("${it / 60}h ${it % 60}m".removePrefix("0h "), color = Muted) }
-                    Text(if (t.isSeries) "Series" else "Movie", color = Muted)
+        item(key = "head") {
+            Row(Modifier.padding(horizontal = 20.dp).offset(y = (-72).dp), verticalAlignment = Alignment.Bottom) {
+                Box(Modifier.width(112.dp).aspectRatio(2f / 3f).shadow(16.dp, RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp)).background(Card)) {
+                    Art(t.poster, t.title, Modifier.fillMaxSize())
                 }
-                if (t.genres.isNotEmpty()) Text(t.genres.take(3).joinToString(" · "), color = Muted, style = MaterialTheme.typography.bodySmall)
-                Spacer(Modifier.height(18.dp))
+                Column(Modifier.padding(start = 16.dp).weight(1f)) {
+                    s?.let { ServiceChip(it, onArt = false) }
+                    Text(t.title, style = MaterialTheme.typography.headlineSmall, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
+                    t.originalTitle?.let { Text(it, color = Muted, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                }
+            }
+        }
+        item(key = "meta") {
+            Column(Modifier.padding(horizontal = 20.dp).offset(y = (-56).dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    t.rating?.let { RatingRing(it) }
+                    Column {
+                        Text(
+                            listOfNotNull(
+                                t.year?.toString(),
+                                if (t.isSeries) listOfNotNull(t.seasonCount?.let { "$it season${if (it == 1) "" else "s"}" }, t.episodeCount?.let { "$it episodes" }).joinToString(" · ").ifEmpty { "Series" }
+                                else t.runtimeMin?.let { "${it / 60}h ${it % 60}m".removePrefix("0h ") },
+                            ).joinToString("  ·  "),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        whyHere(item, s, leavingAt)?.let { Text(it, color = s?.let { brandInk(it, Ink) } ?: Red, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 2.dp)) }
+                    }
+                }
+                if (t.genres.isNotEmpty()) {
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        t.genres.take(5).forEach { GlassTag(it) }
+                    }
+                }
 
+                // ---- actions
                 when (match) {
                     OttMatch.Checking -> Row(Modifier.height(52.dp), verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(Modifier.size(20.dp), color = Red, strokeWidth = 2.dp)
                         Text("  Looking on Usenet…", color = Muted)
                     }
-                    is OttMatch.Movie -> {
+                    is OttMatch.Movie -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         GlassButton({ vm.playOtt(item) }, Modifier.fillMaxWidth()) {
                             Icon(Icons.Filled.PlayArrow, null, Modifier.size(26.dp))
                             Text(" Play", style = MaterialTheme.typography.titleMedium)
                         }
-                        Spacer(Modifier.height(10.dp))
-                        GlassButton({ vm.openTitle(match.group) }, Modifier.fillMaxWidth(), primary = false) {
-                            Text("${match.group.releases.size} releases", style = MaterialTheme.typography.titleSmall)
-                        }
+                        UsenetSummary(vm, match.group) { vm.openTitle(match.group) }
                     }
                     is OttMatch.Show -> GlassButton({ vm.playOtt(item) }, Modifier.fillMaxWidth()) {
                         Icon(Icons.Filled.PlayArrow, null, Modifier.size(26.dp))
                         Text(" Episodes", style = MaterialTheme.typography.titleMedium)
                     }
-                    OttMatch.NotFound -> Text("Not on Usenet yet. New releases usually show up within a few days.", color = Muted)
+                    OttMatch.NotFound -> Text("🕐  Not on Usenet yet. New releases usually show up within a few days.", color = Muted, style = MaterialTheme.typography.bodyMedium)
                     is OttMatch.Failed -> Column {
                         Text(match.message, color = Muted)
                         GlassButton({ vm.back(); vm.openOtt(item) }, Modifier.padding(top = 8.dp), primary = false, height = 44.dp) { Text("Try again") }
                     }
                 }
-
                 if (s != null && link != null) {
-                    Spacer(Modifier.height(10.dp))
                     BrandPill(
                         s,
                         Modifier.fillMaxWidth().height(52.dp).pressable {
@@ -445,8 +542,80 @@ fun OttTitleScreen(vm: MainViewModel, item: OttItem) {
                         label = "Open in ${s.name}",
                     )
                 }
-                t.overview?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 18.dp)) }
+
+                // ---- story
+                t.overview?.let { story ->
+                    Column(Modifier.pressable { storyOpen = !storyOpen }) {
+                        Text("The story", style = MaterialTheme.typography.titleMedium)
+                        Text(story, style = MaterialTheme.typography.bodyMedium, maxLines = if (storyOpen) Int.MAX_VALUE else 4, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp).animateContentSize())
+                        if (!storyOpen && story.length > 200) Text("More", color = Red, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 4.dp))
+                    }
+                }
+
+                // ---- where to watch
+                val options = t.links.filter { it.type != "rent" && it.type != "buy" }.distinctBy { it.serviceId }
+                if (options.isNotEmpty()) {
+                    Text("Where to watch", style = MaterialTheme.typography.titleMedium)
+                    options.forEach { l ->
+                        val svc = ott.service(l.serviceId) ?: return@forEach
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            BrandPill(svc, Modifier.height(34.dp).widthIn(min = 110.dp), fontSize = 13.sp, glow = false)
+                            Column(Modifier.padding(start = 12.dp).weight(1f)) {
+                                if (l.audios.isNotEmpty()) Text("🔊 " + l.audios.take(6).joinToString(" · ") { dev.usenetstream.engine.ott.Languages.name(it) }, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                if (l.subtitles.isNotEmpty()) Text("💬 " + l.subtitles.take(6).joinToString(" · ") { dev.usenetstream.engine.ott.Languages.name(it) }, color = Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                }
             }
         }
+
+        // ---- people
+        val people = castAndCrew(t)
+        if (people.isNotEmpty()) {
+            item(key = "people") {
+                Column(Modifier.offset(y = (-40).dp)) {
+                    RowTitle("Cast & crew")
+                    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        items(people, key = { it.first + it.second }) { (name, role) -> PersonBubble(name, role) }
+                    }
+                }
+            }
+        }
+        if (similar.isNotEmpty()) {
+            item(key = "similar") {
+                Column(Modifier.offset(y = (-24).dp)) {
+                    RowTitle("More like this")
+                    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        items(similar, key = { it.title.id }) { other ->
+                            Column(Modifier.width(112.dp).pressable { vm.openOtt(other) }) {
+                                Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(8.dp)).background(Card)) { Art(other.title.poster, other.title.title, Modifier.fillMaxSize()) }
+                                Text(other.title.title, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** "7 copies · up to 4K · 1080p plays here" under Play; tap for the release list. */
+@Composable
+private fun UsenetSummary(vm: MainViewModel, group: dev.usenetstream.engine.newznab.TitleGroup, onOpen: () -> Unit) {
+    val infos = remember(group) { group.releases.map { dev.usenetstream.engine.newznab.ReleaseParser.parse(it) } }
+    val order = listOf(dev.usenetstream.engine.newznab.Quality.SD, dev.usenetstream.engine.newznab.Quality.HD, dev.usenetstream.engine.newznab.Quality.FHD, dev.usenetstream.engine.newznab.Quality.UHD)
+    val best = infos.map { it.quality }.filter { it in order }.maxByOrNull { order.indexOf(it) }
+    val bestHere = infos.filter { it.playabilityOn(vm.caps) == dev.usenetstream.engine.newznab.Playability.OK }
+        .map { it.quality }.filter { it in order }.maxByOrNull { order.indexOf(it) }
+    GlassButton(onOpen, Modifier.fillMaxWidth(), primary = false, height = 46.dp) {
+        Text(
+            listOfNotNull(
+                "${group.releases.size} cop${if (group.releases.size == 1) "y" else "ies"} on Usenet",
+                best?.let { "up to ${it.label}" },
+                bestHere?.takeIf { it != best }?.let { "${it.label} plays here" },
+            ).joinToString(" · "),
+            style = MaterialTheme.typography.labelLarge,
+        )
     }
 }

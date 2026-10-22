@@ -140,6 +140,7 @@ fun HomeScreen(vm: MainViewModel) {
                 Tile(e.key, e.title, e.coverUrl, year = e.year, onClick = { vm.openKey(e.key, e.title, e.coverUrl) },
                     onRemove = { vm.toggleMyList(e.key, e.title, e.coverUrl, e.year) })
             }, used = used) { sheet = it }
+            item(key = "update") { UpdateCard(dev.usenetstream.update.Updater.get(androidx.compose.ui.platform.LocalContext.current)) }
             ottHomeRows(vm, ott)
             if (feeds.loading && feeds.trending.isEmpty()) {
                 repeat(3) { i -> item(key = "shimmer$i") { ShimmerRow() } }

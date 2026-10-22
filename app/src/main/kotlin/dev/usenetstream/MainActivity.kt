@@ -123,6 +123,8 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         vm.tvLink?.start()
+        // New release on GitHub? (throttled; back from "allow installs" settings, carry on installing)
+        dev.usenetstream.update.Updater.get(this).run { checkInBackground(); resume() }
     }
 
     override fun onStop() {

@@ -1,0 +1,47 @@
+[
+ {
+  "tag_name": "v0.1.0-beta.3",
+  "name": "Grabbit 0.1.0 beta 3",
+  "draft": false,
+  "prerelease": true,
+  "published_at": "2026-10-22T18:32:21Z",
+  "assets": [
+   {
+    "name": "Grabbit-0.1.0-beta.3.apk",
+    "size": 5778917,
+    "browser_download_url": "https://github.com/thisisshub/grabbit/releases/download/v0.1.0-beta.3/Grabbit-0.1.0-beta.3.apk"
+   }
+  ],
+  "body": "In-app feedback (no GitHub account needed) and automatic, anonymous playback error reports."
+ },
+ {
+  "tag_name": "v0.1.0-beta.2",
+  "name": "Grabbit 0.1.0 beta 2",
+  "draft": false,
+  "prerelease": true,
+  "published_at": "2026-10-22T18:08:00Z",
+  "assets": [
+   {
+    "name": "Grabbit-0.1.0-beta.2.apk",
+    "size": 5778917,
+    "browser_download_url": "https://github.com/thisisshub/grabbit/releases/download/v0.1.0-beta.2/Grabbit-0.1.0-beta.2.apk"
+   }
+  ],
+  "body": "**Grabbit beta 2.** New: service pills spelled out in their brand colours, and a \"buy me a chai\" link in Settings. Stream straight from Usenet on your Android phone and Android TV.\n\n> Educational, non-commercial beta. Grabbit hosts no content; you're responsible for what you watch. See the [disclaimer](https://github.com/thisisshub/grabbit#disclaimer).\n\n### Install\n1. Download **Grabbit-0.1.0-beta.2.apk** below on your phone (or install it on your TV with the *Downloader* app).\n2. Allow \"install unknown apps\" when asked, open Grabbit and accept the beta notice.\n3. Settings: add your Usenet server and Newznab indexer. On a TV, scan the QR code and type them on your phone.\n\n### What's in it\n- Instant playback with seeking, straight from Usenet (stored RAR and password-protected 7z sets too)\n- What's new and Top 10 on Netflix, Prime Video, Apple TV, JioHotstar and more\n- Shows by season with per-episode progress, Continue Watching and next-episode autoplay\n- Android TV app; say a title on your phone and it plays on the TV\n- Picks releases your device can actually play\n\n### Tell us what you think\nIn the app: **Settings \u2192 Beta feedback** (on TV, scan the QR). It opens a pre-filled, auto-labelled GitHub issue.\n"
+ },
+ {
+  "tag_name": "v0.1.0-beta.1",
+  "name": "Grabbit 0.1.0 beta 1",
+  "draft": false,
+  "prerelease": true,
+  "published_at": "2026-10-22T17:46:37Z",
+  "assets": [
+   {
+    "name": "Grabbit-0.1.0-beta.1.apk",
+    "size": 5828157,
+    "browser_download_url": "https://github.com/thisisshub/grabbit/releases/download/v0.1.0-beta.1/Grabbit-0.1.0-beta.1.apk"
+   }
+  ],
+  "body": "**First beta of Grabbit.** Stream straight from Usenet on your Android phone and Android TV.\n\n> Educational, non-commercial beta. Grabbit hosts no content; you're responsible for what you watch. See the [disclaimer](https://github.com/thisisshub/grabbit#disclaimer).\n\n### Install\n1. Download **Grabbit-0.1.0-beta.1.apk** below on your phone (or install it on your TV with the *Downloader* app).\n2. Allow \"install unknown apps\" when asked, open Grabbit and accept the beta notice.\n3. Settings: add your Usenet server and Newznab indexer. On a TV, scan the QR code and type them on your phone.\n\n### What's in it\n- Instant playback with seeking, straight from Usenet (stored RAR and password-protected 7z sets too)\n- What's new and Top 10 on Netflix, Prime Video, Apple TV, JioHotstar and more\n- Shows by season with per-episode progress, Continue Watching and next-episode autoplay\n- Android TV app; say a title on your phone and it plays on the TV\n- Picks releases your device can actually play\n\n### Tell us what you think\nIn the app: **Settings \u2192 Beta feedback** (on TV, scan the QR). It opens a pre-filled, auto-labelled GitHub issue.\n"
+ }
+]

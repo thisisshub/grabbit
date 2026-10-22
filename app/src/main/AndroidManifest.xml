@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- In-app updates from GitHub Releases. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Finding the TV on the home Wi-Fi (NSD needs multicast on some phones). -->
@@ -45,5 +48,6 @@
                 <data android:mimeType="application/x-nzb" />
             </intent-filter>
         </activity>
+        <receiver android:name=".update.InstallResultReceiver" android:exported="false" />
     </application>
 </manifest>

@@ -73,6 +73,9 @@ fun SettingsTab(vm: MainViewModel, openFile: () -> Unit) {
             FeedbackSection(vm)
         }
 
+        Section("Updates")
+        UpdateSettings(dev.usenetstream.update.Updater.get(androidx.compose.ui.platform.LocalContext.current))
+
         Section(dev.usenetstream.feedback.Support.TITLE)
         SupportSection(vm)
 

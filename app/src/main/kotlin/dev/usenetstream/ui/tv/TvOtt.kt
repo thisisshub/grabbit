@@ -257,45 +257,81 @@ fun TvOttTitle(vm: MainViewModel, item: OttItem) {
     val match = matches[t.id] ?: OttMatch.Checking
     val context = LocalContext.current
     val link = t.linkOn(item.serviceId)
+    val leavingAt = ott.leaving[item.serviceId]?.firstOrNull { it.title.id == t.id }?.since
+    val similar = remember(ott, t.id) { dev.usenetstream.ui.moreLike(ott, t) }
     val main = remember { FocusRequester() }
     LaunchedEffect(match) { delay(150); runCatching { main.requestFocus() } }
 
     Box(Modifier.fillMaxSize().background(P.bg)) {
         TvArt(t.backdrop ?: t.wide, t.title, Modifier.fillMaxSize())
         Box(Modifier.fillMaxSize().tvScrim())
-        Column(Modifier.align(Alignment.CenterStart).padding(start = TvSafeH).width(640.dp)) {
-            s?.let { BrandPill(it, Modifier.height(30.dp), fontSize = 14.sp, scrim = true, glow = false) }
-            Text(t.title, fontSize = 44.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, letterSpacing = (-0.8).sp, modifier = Modifier.padding(top = 12.dp))
-            Text(
-                listOfNotNull(t.year?.toString(), t.rating?.let { "★ %.1f".format(it / 10.0) }, t.runtimeMin?.let { "${it / 60}h ${it % 60}m".removePrefix("0h ") }, if (t.isSeries) "Series" else "Movie", t.genres.take(3).joinToString(" • ").ifEmpty { null })
-                    .joinToString("   "),
-                color = P.muted, fontSize = 16.sp, modifier = Modifier.padding(top = 6.dp),
-            )
-            t.overview?.let { Text(it, color = P.fg.copy(alpha = 0.85f), fontSize = 16.sp, maxLines = 4, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 12.dp)) }
-            Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                when (match) {
-                    OttMatch.Checking -> {
-                        CircularProgressIndicator(Modifier.size(28.dp), color = P.accent)
-                        Text("Looking on Usenet…", color = P.muted, fontSize = 16.sp)
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = TvSafeV + 30.dp, bottom = TvSafeV)) {
+            item {
+                Row(Modifier.padding(start = TvSafeH), verticalAlignment = Alignment.Top) {
+                    Box(Modifier.width(150.dp).aspectRatio(2f / 3f).clip(RoundedCornerShape(10.dp)).background(P.surface)) { TvArt(t.poster, t.title, Modifier.fillMaxSize()) }
+                    Column(Modifier.padding(start = 28.dp).width(660.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        s?.let { BrandPill(it, Modifier.height(30.dp), fontSize = 14.sp, scrim = true, glow = false) }
+                        Text(t.title, fontSize = 40.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, letterSpacing = (-0.8).sp)
+                        t.originalTitle?.let { Text(it, color = P.muted, fontSize = 18.sp, maxLines = 1) }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            t.rating?.let { dev.usenetstream.ui.RatingRing(it, 52.dp) }
+                            Column {
+                                Text(
+                                    listOfNotNull(
+                                        t.year?.toString(),
+                                        if (t.isSeries) listOfNotNull(t.seasonCount?.let { "$it season${if (it == 1) "" else "s"}" }, t.episodeCount?.let { "$it episodes" }).joinToString(" · ").ifEmpty { "Series" }
+                                        else t.runtimeMin?.let { "${it / 60}h ${it % 60}m".removePrefix("0h ") },
+                                        t.genres.take(3).joinToString(" • ").ifEmpty { null },
+                                    ).joinToString("   "),
+                                    color = P.fg, fontSize = 17.sp,
+                                )
+                                dev.usenetstream.ui.whyHere(item, s, leavingAt)?.let { Text(it, color = s?.let { sv -> brandInk(sv, P.bg) } ?: P.accent, fontSize = 16.sp) }
+                            }
+                        }
+                        t.overview?.let { Text(it, color = P.fg.copy(alpha = 0.85f), fontSize = 16.sp, maxLines = 3, overflow = TextOverflow.Ellipsis) }
+                        Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            when (match) {
+                                OttMatch.Checking -> {
+                                    CircularProgressIndicator(Modifier.size(28.dp), color = P.accent)
+                                    Text("Looking on Usenet…", color = P.muted, fontSize = 16.sp)
+                                }
+                                is OttMatch.Movie -> {
+                                    TvButton("Play", { vm.playOtt(item) }, Modifier.focusRequester(main), primary = true, leading = { Icon(Icons.Filled.PlayArrow, null, tint = LocalContentColor.current) })
+                                    TvButton("${match.group.releases.size} copies on Usenet", { vm.openTitle(match.group) })
+                                }
+                                is OttMatch.Show -> TvButton("Episodes", { vm.playOtt(item) }, Modifier.focusRequester(main), primary = true, leading = { Icon(Icons.Filled.PlayArrow, null, tint = LocalContentColor.current) })
+                                OttMatch.NotFound -> Text("Not on Usenet yet", color = P.muted, fontSize = 16.sp)
+                                is OttMatch.Failed -> TvButton("Try again", { vm.back(); vm.openOtt(item) }, Modifier.focusRequester(main))
+                            }
+                            if (s != null && link != null) {
+                                TvBrandFocusable(
+                                    s,
+                                    onClick = {
+                                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link.videoLink ?: link.link)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                                            .onFailure { vm.notifyUser("${s.name} isn't installed on this TV") }
+                                    },
+                                    modifier = Modifier.height(52.dp).let { if (match == OttMatch.NotFound || match == OttMatch.Checking) it.focusRequester(main) else it },
+                                ) { ink -> Text("Open in ${s.name}", color = ink, fontSize = 17.sp, maxLines = 1, modifier = Modifier.padding(horizontal = 24.dp)) }
+                            }
+                        }
+                        link?.let { l ->
+                            if (l.audios.isNotEmpty()) Text("🔊 " + l.audios.take(6).joinToString(" · ") { dev.usenetstream.engine.ott.Languages.name(it) } +
+                                if (l.subtitles.isNotEmpty()) "     💬 " + l.subtitles.take(5).joinToString(" · ") { dev.usenetstream.engine.ott.Languages.name(it) } else "",
+                                color = P.muted, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
+                        }
                     }
-                    is OttMatch.Movie -> {
-                        TvButton("Play", { vm.playOtt(item) }, Modifier.focusRequester(main), primary = true, leading = { Icon(Icons.Filled.PlayArrow, null, tint = LocalContentColor.current) })
-                        TvButton("${match.group.releases.size} releases", { vm.openTitle(match.group) })
-                    }
-                    is OttMatch.Show -> TvButton("Episodes", { vm.playOtt(item) }, Modifier.focusRequester(main), primary = true, leading = { Icon(Icons.Filled.PlayArrow, null, tint = LocalContentColor.current) })
-                    OttMatch.NotFound -> Text("Not on Usenet yet", color = P.muted, fontSize = 16.sp)
-                    is OttMatch.Failed -> TvButton("Try again", { vm.back(); vm.openOtt(item) }, Modifier.focusRequester(main))
                 }
-                if (s != null && link != null) {
-                    TvBrandFocusable(
-                        s,
-                        onClick = {
-                            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link.videoLink ?: link.link)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                                .onFailure { vm.notifyUser("${s.name} isn't installed on this TV") }
-                        },
-                        modifier = Modifier.height(52.dp).let { if (match == OttMatch.NotFound || match == OttMatch.Checking) it.focusRequester(main) else it },
-                    ) { ink -> Text("Open in ${s.name}", color = ink, fontSize = 17.sp, maxLines = 1, modifier = Modifier.padding(horizontal = 24.dp)) }
+            }
+            val people = dev.usenetstream.ui.castAndCrew(t)
+            if (people.isNotEmpty()) item {
+                TvRowTitle("Cast & crew", Modifier.padding(top = 24.dp))
+                LazyRow(contentPadding = PaddingValues(horizontal = TvSafeH), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    items(people, key = { it.first + it.second }) { (name, role) -> dev.usenetstream.ui.PersonBubble(name, role) }
                 }
+            }
+            if (similar.isNotEmpty()) item {
+                TvRowTitle("More like this")
+                TvPosterRow(similar.map { o -> TvTile(o.title.id, o.title.title, o.title.poster, null, o.title.year?.toString()) { vm.openOtt(o) } })
             }
         }
     }

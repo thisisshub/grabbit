@@ -22,9 +22,10 @@ android {
         applicationId = "dev.usenetstream"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.1.0-beta.3"
+        versionCode = (findProperty("grabbit.versionCode") as String?)?.toInt() ?: 5
+        versionName = (findProperty("grabbit.versionName") as String?) ?: "0.1.0-beta.4"
         buildConfigField("String", "GUIDE_KEY", "\"${localProp("grabbit.guideKey")}\"")
+        buildConfigField("String", "UPDATE_REPO", "\"${localProp("grabbit.updateRepo").ifEmpty { "thisisshub/grabbit" }}\"")
         buildConfigField("String", "FEEDBACK_URL", "\"${localProp("grabbit.feedbackUrl")}\"")
         val friends = project.hasProperty("friends")
         fun friendsProp(name: String) = if (friends) localProp("grabbit.friends.$name") else ""

@@ -24,8 +24,18 @@ data class OttService(
     val logoOnDark: String?,
 )
 
-/** Where a title streams on one service. */
-data class OttLink(val serviceId: String, val type: String, val link: String, val videoLink: String?)
+/** Where a title streams on one service. [audios]/[subtitles] are ISO 639-2 codes ("hin", "eng"). */
+data class OttLink(
+    val serviceId: String,
+    val type: String,
+    val link: String,
+    val videoLink: String?,
+    val audios: List<String> = emptyList(),
+    val subtitles: List<String> = emptyList(),
+    /** Unix seconds. */
+    val availableSince: Long? = null,
+    val expiresOn: Long? = null,
+)
 
 data class OttTitle(
     /** Movie of the Night's own id; stable key for rows. */
@@ -45,6 +55,13 @@ data class OttTitle(
     /** 16:9 key art without text; best behind a hero. */
     val backdrop: String?,
     val links: List<OttLink>,
+    /** Title in its own language/script when it differs ("என்ன விலை"). */
+    val originalTitle: String? = null,
+    val cast: List<String> = emptyList(),
+    /** Directors for movies, creators for series. */
+    val makers: List<String> = emptyList(),
+    val seasonCount: Int? = null,
+    val episodeCount: Int? = null,
 ) {
     fun linkOn(serviceId: String): OttLink? = links.firstOrNull { it.serviceId == serviceId && it.type != "rent" && it.type != "buy" }
         ?: links.firstOrNull { it.serviceId == serviceId }
@@ -56,6 +73,20 @@ data class OttItem(val title: OttTitle, val serviceId: String, val rank: Int? = 
 class OttException(message: String) : IOException(message)
 
 /** Brand colours from the API, with fixes for those that would vanish on a dark page. */
+/** "hin" -> "Hindi" for the languages streaming services carry most. */
+object Languages {
+    private val NAMES = mapOf(
+        "eng" to "English", "hin" to "Hindi", "tam" to "Tamil", "tel" to "Telugu", "mal" to "Malayalam", "kan" to "Kannada",
+        "ben" to "Bengali", "mar" to "Marathi", "guj" to "Gujarati", "pan" to "Punjabi", "urd" to "Urdu", "spa" to "Spanish",
+        "fra" to "French", "fre" to "French", "deu" to "German", "ger" to "German", "ita" to "Italian", "por" to "Portuguese",
+        "jpn" to "Japanese", "kor" to "Korean", "zho" to "Chinese", "chi" to "Chinese", "cmn" to "Mandarin", "ara" to "Arabic",
+        "rus" to "Russian", "tur" to "Turkish", "tha" to "Thai", "ind" to "Indonesian", "nld" to "Dutch", "dut" to "Dutch",
+        "pol" to "Polish", "swe" to "Swedish",
+    )
+
+    fun name(code: String): String = NAMES[code.lowercase()] ?: code.uppercase()
+}
+
 object Brand {
     /** Apple TV and JioHotstar are listed as pure black. */
     private val OVERRIDES = mapOf(
@@ -230,7 +261,14 @@ class MotnClient(private val apiKey: String, private val http: HeaderGet = UrlHe
             val links = s["streamingOptions"].obj()?.get(country.lowercase()).list().mapNotNull { o ->
                 val opt = o.obj() ?: return@mapNotNull null
                 val sid = opt["service"].obj()?.str("id") ?: return@mapNotNull null
-                OttLink(sid, opt.str("type") ?: "subscription", opt.str("link") ?: return@mapNotNull null, opt.str("videoLink"))
+                fun langs(key: String, path: (Map<String, Any?>) -> String?) = opt[key].list().mapNotNull { it.obj()?.let(path) }.distinct()
+                OttLink(
+                    sid, opt.str("type") ?: "subscription", opt.str("link") ?: return@mapNotNull null, opt.str("videoLink"),
+                    audios = langs("audios") { it.str("language") },
+                    subtitles = langs("subtitles") { it["locale"].obj()?.str("language") },
+                    availableSince = (opt["availableSince"] as? Double)?.toLong(),
+                    expiresOn = (opt["expiresOn"] as? Double)?.toLong(),
+                )
             }
             return OttTitle(
                 id = s.str("id") ?: return null,
@@ -246,6 +284,11 @@ class MotnClient(private val apiKey: String, private val http: HeaderGet = UrlHe
                 wide = img("horizontalPoster", "w720", "w1080", "w480"),
                 backdrop = img("horizontalBackdrop", "w1080", "w1440", "w720"),
                 links = links,
+                originalTitle = s.str("originalTitle")?.takeIf { it.isNotBlank() && it != s.str("title") },
+                cast = s["cast"].list().filterIsInstance<String>(),
+                makers = (s["directors"].list() + s["creators"].list()).filterIsInstance<String>().distinct(),
+                seasonCount = s.int("seasonCount"),
+                episodeCount = s.int("episodeCount"),
             )
         }
     }
